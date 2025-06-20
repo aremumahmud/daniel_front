@@ -35,6 +35,12 @@ export interface ChangePasswordData {
   newPassword: string
 }
 
+export interface AdminLoginCredentials {
+  email: string
+  password: string
+  adminCode: string
+}
+
 export interface UpdateProfileData {
   firstName?: string
   lastName?: string
@@ -60,15 +66,27 @@ export interface UpdateProfileData {
 
 class AuthService {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>("/auth", credentials)
+    const response = await apiClient.post<AuthResponse>("/auth/login", credentials)
 
-    if (response.success && response.data) {
-      TokenManager.setToken(response.data.token)
-      console.log("Login successful:", response.data.token)
-      return response.data
+    if (response.success && response.user) {
+      TokenManager.setToken(response.token)
+      console.log("Login successful:", response.token)
+      return response
     }
 
     throw new Error(response.message || "Login failed")
+  }
+
+  async adminLogin(credentials: AdminLoginCredentials): Promise<AuthResponse> {
+    const response = await apiClient.post<AuthResponse>("/auth/admin-login", credentials)
+
+    if (response.success && response.data) {
+      TokenManager.setToken(response.data.token)
+      console.log("Admin login successful:", response.data.token)
+      return response.data
+    }
+
+    throw new Error(response.message || "Admin login failed")
   }
 
   async register(userData: RegisterData): Promise<AuthResponse> {
