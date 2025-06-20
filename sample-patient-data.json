@@ -1,0 +1,97 @@
+{
+  "firstName": "Sarah",
+  "lastName": "Johnson",
+  "middleName": "Elizabeth",
+  "dateOfBirth": "1985-03-22",
+  "gender": "female",
+  "maritalStatus": "married",
+  "nationality": "American",
+  "languageSpoken": "English",
+  "bloodType": "A+",
+  "religion": "Catholic",
+  "occupation": "Teacher",
+  
+  "phoneNumber": "+15551234567",
+  "emailAddress": "sarah.johnson@email.com",
+  "homeAddress": "456 Oak Avenue, Springfield, IL 62701",
+  "emergencyContact": {
+    "name": "Michael Johnson",
+    "phone": "+15551234568",
+    "relationship": "spouse"
+  },
+  
+  "insurance": {
+    "provider": "Aetna Health Insurance",
+    "policyNumber": "AET987654321",
+    "paymentType": "insurance",
+    "billingAddress": "456 Oak Avenue, Springfield, IL 62701"
+  },
+  
+  "medicalHistory": {
+    "chronicIllnesses": ["Asthma", "Seasonal Allergies"],
+    "allergies": ["Shellfish", "Latex"],
+    "pastSurgeries": ["Cesarean Section (2018)", "Wisdom Teeth Removal (2010)"],
+    "currentMedications": ["Albuterol Inhaler", "Claritin 10mg daily"],
+    "familyHistory": "Mother has diabetes, Father has high blood pressure, Maternal grandmother had breast cancer",
+    "smokingStatus": "never",
+    "alcoholConsumption": "occasional",
+    "vaccinationHistory": "COVID-19 (Pfizer, 2021), Flu shot (2023), Tdap (2020), MMR (childhood)"
+  },
+  
+  "admission": {
+    "dateOfAdmission": "2024-01-20T14:30:00Z",
+    "doctorAssigned": "Dr. Emily Rodriguez",
+    "department": "other",
+    "symptomsComplaints": "Persistent cough for 2 weeks, mild fever, fatigue",
+    "provisionalDiagnosis": "Upper respiratory infection, possible bronchitis",
+    "labTestsOrdered": ["Complete Blood Count", "Chest X-ray", "Throat Culture"],
+    "medicationsPrescribed": "Azithromycin 250mg daily for 5 days, Dextromethorphan cough syrup",
+    "proceduresPerformed": ["Physical examination", "Chest X-ray"],
+    "treatmentPlan": "Antibiotic course, rest, increased fluid intake, follow-up if symptoms persist",
+    "followUpDate": "2024-01-27"
+  },
+  
+  "vitalSigns": {
+    "temperature": 37.2,
+    "bloodPressure": "118/76",
+    "heartRate": 78,
+    "respiratoryRate": 18,
+    "oxygenSaturation": 97,
+    "weight": 65.5,
+    "height": 1.68
+  },
+  
+  "testResults": [
+    {
+      "testName": "Complete Blood Count",
+      "testDate": "2024-01-20",
+      "testResult": "WBC: 12,500 (slightly elevated), RBC: 4.2, Hemoglobin: 13.8, Platelets: 285,000",
+      "doctorComments": "Mild leukocytosis consistent with bacterial infection"
+    },
+    {
+      "testName": "Chest X-ray",
+      "testDate": "2024-01-20",
+      "testResult": "Clear lung fields, no consolidation or effusion",
+      "doctorComments": "No evidence of pneumonia, consistent with upper respiratory infection"
+    }
+  ],
+  
+  "dischargeSummary": {
+    "dischargeDate": "2024-01-20",
+    "finalDiagnosis": "Acute bronchitis with upper respiratory infection",
+    "medicationsForHome": "Azithromycin 250mg daily for 5 days, Dextromethorphan cough syrup as needed, continue Albuterol inhaler as needed",
+    "dischargeInstructions": "Complete full course of antibiotics, rest for 3-5 days, increase fluid intake, use humidifier, return if fever persists >3 days or breathing difficulties develop",
+    "nextFollowUp": "2024-01-27"
+  },
+  
+  "documents": {
+    "scannedIdCard": "/uploads/id-cards/sarah-johnson-id.pdf",
+    "labTestReports": [
+      "/uploads/lab-reports/sarah-johnson-cbc-20240120.pdf",
+      "/uploads/lab-reports/sarah-johnson-throat-culture-20240120.pdf"
+    ],
+    "imagingReports": [
+      "/uploads/imaging/sarah-johnson-chest-xray-20240120.pdf"
+    ]
+  }
+}
