@@ -1,0 +1,33 @@
+TokenManager.getToken() called, token exists: true
+auth.service.ts:315 Token appears valid
+use-auth.tsx:48 Auth initialization - has valid token: true
+use-auth.tsx:51 Token found, attempting to get current user...
+api.ts:35 TokenManager.getToken() called, token exists: true
+auth.service.ts:315 Token appears valid
+api.ts:35 TokenManager.getToken() called, token exists: true
+api.ts:65 API Request: GET http://localhost:8080/api/auth/admin/me
+
+api.ts:77 
+            
+            
+           GET http://localhost:8080/api/auth/admin/me 404 (Not Found)
+request @ api.ts:77
+get @ api.ts:114
+getCurrentUser @ auth.service.ts:76
+
+auth.service.ts:121 Failed to get admin user from /auth/admin/me: Error: Route not found
+
+Trying fallback to /auth/me endpoint...
+api.ts:35 TokenManager.getToken() called, token exists: true
+api.ts:65 API Request: GET http://localhost:8080/api/auth/me
+
+auth.service.ts:135 Fallback /auth/me also failed: Error: Failed to get user data from fallback
+
+use-auth.tsx:58 Failed to get current user: Error: Route not found
+Non-auth error getting user data, trying token fallback
+use-auth.tsx:75 Token payload for fallback: {id: '9f433e95-aa46-4071-834b-504345d98976', iat: 1750342179, exp: 1750946979}
+use-auth.tsx:79 No role found in token payload, cannot create fallback user
+overrideMethod @ hook.js:608
+error @ intercept-console-error.js:50
+AuthProvider.useEffect.initAuth @ use-auth.tsx:79
+use-auth.tsx:80 Available payload fields: (3) ['id', 'iat', 'exp']

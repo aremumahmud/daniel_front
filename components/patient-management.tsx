@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/hooks/use-toast"
 import { adminService, type PatientListItem, type PatientFilters, type PatientListResponse } from "@/services/admin.service"
-import { Search, Filter, Plus, Eye, Edit, Trash2, Users, UserCheck, UserX } from "lucide-react"
+import { Search, Filter, Plus, Eye, Edit, Trash2, Users, UserCheck, UserX, UserPlus } from "lucide-react"
+import { Dialog, DialogTrigger } from "@/components/ui/dialog"
+import { AssignDoctorDialog } from "@/components/assign-doctor-dialog"
 
 interface PatientManagementProps {
   onViewPatient?: (patientId: string) => void
@@ -22,6 +24,8 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
   const router = useRouter()
   const [patients, setPatients] = useState<PatientListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false)
+  const [selectedPatientForAssignment, setSelectedPatientForAssignment] = useState<PatientListItem | null>(null)
   const [pagination, setPagination] = useState({
     total: 0,
     limit: 20,
@@ -119,6 +123,18 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
     }
   }
 
+  const handleAssignToDoctor = (patient: PatientListItem) => {
+    setSelectedPatientForAssignment(patient)
+    setAssignDialogOpen(true)
+  }
+
+  const handleAssignmentComplete = () => {
+    setAssignDialogOpen(false)
+    setSelectedPatientForAssignment(null)
+    // Optionally refresh the patient list or update UI
+    fetchPatients()
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString()
   }
@@ -206,14 +222,14 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
               <div>
                 <Label htmlFor="gender">Gender</Label>
                 <Select
-                  value={filters.gender || ''}
-                  onValueChange={(value) => handleFilterChange('gender', value)}
+                  value={filters.gender || 'all'}
+                  onValueChange={(value) => handleFilterChange('gender', value === 'all' ? '' : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All Genders" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Genders</SelectItem>
+                    <SelectItem value="all">All Genders</SelectItem>
                     <SelectItem value="male">Male</SelectItem>
                     <SelectItem value="female">Female</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
@@ -224,14 +240,14 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
               <div>
                 <Label htmlFor="bloodType">Blood Type</Label>
                 <Select
-                  value={filters.bloodType || ''}
-                  onValueChange={(value) => handleFilterChange('bloodType', value)}
+                  value={filters.bloodType || 'all'}
+                  onValueChange={(value) => handleFilterChange('bloodType', value === 'all' ? '' : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All Blood Types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Blood Types</SelectItem>
+                    <SelectItem value="all">All Blood Types</SelectItem>
                     <SelectItem value="O+">O+</SelectItem>
                     <SelectItem value="O-">O-</SelectItem>
                     <SelectItem value="A+">A+</SelectItem>
@@ -247,14 +263,14 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
               <div>
                 <Label htmlFor="department">Department</Label>
                 <Select
-                  value={filters.department || ''}
-                  onValueChange={(value) => handleFilterChange('department', value)}
+                  value={filters.department || 'all'}
+                  onValueChange={(value) => handleFilterChange('department', value === 'all' ? '' : value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All Departments" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Departments</SelectItem>
+                    <SelectItem value="all">All Departments</SelectItem>
                     <SelectItem value="cardiology">Cardiology</SelectItem>
                     <SelectItem value="neurology">Neurology</SelectItem>
                     <SelectItem value="pediatrics">Pediatrics</SelectItem>
@@ -266,14 +282,14 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
               <div>
                 <Label htmlFor="status">Status</Label>
                 <Select
-                  value={filters.isActive?.toString() || ''}
-                  onValueChange={(value) => handleFilterChange('isActive', value === '' ? undefined : value === 'true')}
+                  value={filters.isActive?.toString() || 'all'}
+                  onValueChange={(value) => handleFilterChange('isActive', value === 'all' ? undefined : value === 'true')}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="true">Active</SelectItem>
                     <SelectItem value="false">Inactive</SelectItem>
                   </SelectContent>
@@ -362,6 +378,15 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
                     Edit
                   </Button>
                   <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleAssignToDoctor(patient)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Assign to Doctor
+                  </Button>
+                  <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDeletePatient(patient._id, `${patient.firstName} ${patient.lastName}`)}
@@ -436,6 +461,17 @@ export function PatientManagement({ onViewPatient, onEditPatient }: PatientManag
             </Select>
           </div>
         </div>
+      )}
+
+      {/* Assign Doctor Dialog */}
+      {selectedPatientForAssignment && (
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <AssignDoctorDialog
+            patientId={selectedPatientForAssignment._id}
+            patientName={`${selectedPatientForAssignment.firstName} ${selectedPatientForAssignment.lastName}`}
+            onAssignmentComplete={handleAssignmentComplete}
+          />
+        </Dialog>
       )}
     </div>
   )

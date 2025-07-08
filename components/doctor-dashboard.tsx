@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Users, FileText, Activity, Bell, Plus, Search, Filter, Clock, MapPin, Phone, Mail, Star, TrendingUp, DollarSign, MessageSquare, Settings, Stethoscope, Edit } from "lucide-react"
+import { Calendar, Users, FileText, Activity, Bell, Plus, Search, Filter, Clock, MapPin, Phone, Mail, Star, TrendingUp, DollarSign, MessageSquare, Settings, Stethoscope, Edit, UserCheck, RotateCcw } from "lucide-react"
 import { DoctorSideNav } from "@/components/doctor-side-nav"
 import { DoctorAppointments } from "@/components/doctor-appointments"
 import { DoctorSettingsPage } from "@/components/doctor-settings-page"
@@ -28,6 +28,7 @@ import { toast } from "@/hooks/use-toast"
 import { doctorService } from "@/services/doctor.service"
 import { useAuth } from "@/hooks/use-auth"
 import { Skeleton } from "@/components/ui/skeleton"
+import { webSocketService } from "@/services/websocket.service"
 import type { DoctorDashboard as DoctorDashboardType, Patient, Doctor } from "@/lib/types/api"
 
 // Medical Records Component
@@ -36,6 +37,8 @@ function DoctorMedicalRecords() {
   const [loading, setLoading] = useState(true)
   const [selectedPatient, setSelectedPatient] = useState("")
   const [recordType, setRecordType] = useState("all")
+  const [isNewRecordDialogOpen, setIsNewRecordDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     loadMedicalRecords()
@@ -61,11 +64,70 @@ function DoctorMedicalRecords() {
     }
   }
 
+  const handleCreateRecord = async (formData: FormData) => {
+    try {
+      setIsSubmitting(true)
+
+      const recordData = {
+        patientId: formData.get('patientId') as string,
+        recordType: formData.get('recordType') as string,
+        chiefComplaint: formData.get('chiefComplaint') as string,
+        presentIllness: formData.get('presentIllness') as string,
+        physicalExamination: formData.get('physicalExamination') as string,
+        diagnosis: [
+          {
+            primary: true,
+            code: formData.get('diagnosisCode') as string || "Z00.00",
+            description: formData.get('diagnosis') as string
+          }
+        ],
+        treatment: formData.get('treatment') as string,
+        medications: formData.get('medications') ? [
+          {
+            name: formData.get('medicationName') as string,
+            dosage: formData.get('medicationDosage') as string,
+            frequency: formData.get('medicationFrequency') as string,
+            duration: formData.get('medicationDuration') as string,
+            instructions: formData.get('medicationInstructions') as string
+          }
+        ] : [],
+        vitalSigns: {
+          bloodPressure: {
+            systolic: parseInt(formData.get('systolic') as string) || undefined,
+            diastolic: parseInt(formData.get('diastolic') as string) || undefined
+          },
+          heartRate: parseInt(formData.get('heartRate') as string) || undefined,
+          temperature: parseFloat(formData.get('temperature') as string) || undefined,
+          weight: parseFloat(formData.get('weight') as string) || undefined
+        }
+      }
+
+      await doctorService.createMedicalRecord(recordData)
+
+      toast({
+        title: "Success",
+        description: "Medical record created successfully",
+      })
+
+      setIsNewRecordDialogOpen(false)
+      loadMedicalRecords() // Refresh the records list
+
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create medical record",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Medical Records</h1>
-        <Button>
+        <Button onClick={() => setIsNewRecordDialogOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Record
         </Button>
@@ -130,6 +192,229 @@ function DoctorMedicalRecords() {
           ))}
         </div>
       )}
+
+      {/* New Medical Record Dialog */}
+      <Dialog open={isNewRecordDialogOpen} onOpenChange={setIsNewRecordDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Medical Record</DialogTitle>
+            <DialogDescription>
+              Fill in the details for the new medical record
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            handleCreateRecord(new FormData(e.currentTarget))
+          }}>
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="patientId">Patient ID</Label>
+                  <Input
+                    id="patientId"
+                    name="patientId"
+                    placeholder="Enter patient ID"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="recordType">Record Type</Label>
+                  <Select name="recordType" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select record type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="consultation">Consultation</SelectItem>
+                      <SelectItem value="follow-up">Follow-up</SelectItem>
+                      <SelectItem value="lab-result">Lab Result</SelectItem>
+                      <SelectItem value="prescription">Prescription</SelectItem>
+                      <SelectItem value="diagnosis">Diagnosis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Chief Complaint and Present Illness */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chiefComplaint">Chief Complaint</Label>
+                  <Textarea
+                    id="chiefComplaint"
+                    name="chiefComplaint"
+                    placeholder="Why did the patient come in?"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="presentIllness">Present Illness</Label>
+                  <Textarea
+                    id="presentIllness"
+                    name="presentIllness"
+                    placeholder="History of present illness"
+                  />
+                </div>
+              </div>
+
+              {/* Physical Examination and Diagnosis */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="physicalExamination">Physical Examination</Label>
+                  <Textarea
+                    id="physicalExamination"
+                    name="physicalExamination"
+                    placeholder="Physical examination findings"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="diagnosis">Diagnosis</Label>
+                    <Input
+                      id="diagnosis"
+                      name="diagnosis"
+                      placeholder="Primary diagnosis"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="diagnosisCode">Diagnosis Code</Label>
+                    <Input
+                      id="diagnosisCode"
+                      name="diagnosisCode"
+                      placeholder="ICD-10 code (optional)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Treatment */}
+              <div className="space-y-2">
+                <Label htmlFor="treatment">Treatment Plan</Label>
+                <Textarea
+                  id="treatment"
+                  name="treatment"
+                  placeholder="Treatment plan and recommendations"
+                  required
+                />
+              </div>
+
+              {/* Medications */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Medications (Optional)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationName">Medication Name</Label>
+                    <Input
+                      id="medicationName"
+                      name="medicationName"
+                      placeholder="e.g., Ibuprofen"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationDosage">Dosage</Label>
+                    <Input
+                      id="medicationDosage"
+                      name="medicationDosage"
+                      placeholder="e.g., 400mg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationFrequency">Frequency</Label>
+                    <Input
+                      id="medicationFrequency"
+                      name="medicationFrequency"
+                      placeholder="e.g., twice daily"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationDuration">Duration</Label>
+                    <Input
+                      id="medicationDuration"
+                      name="medicationDuration"
+                      placeholder="e.g., 7 days"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="medicationInstructions">Instructions</Label>
+                  <Input
+                    id="medicationInstructions"
+                    name="medicationInstructions"
+                    placeholder="e.g., Take with food"
+                  />
+                </div>
+              </div>
+
+              {/* Vital Signs */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Vital Signs (Optional)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="systolic">Blood Pressure (Systolic)</Label>
+                    <Input
+                      id="systolic"
+                      name="systolic"
+                      type="number"
+                      placeholder="e.g., 120"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="diastolic">Blood Pressure (Diastolic)</Label>
+                    <Input
+                      id="diastolic"
+                      name="diastolic"
+                      type="number"
+                      placeholder="e.g., 80"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="heartRate">Heart Rate (bpm)</Label>
+                    <Input
+                      id="heartRate"
+                      name="heartRate"
+                      type="number"
+                      placeholder="e.g., 72"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="temperature">Temperature (°F)</Label>
+                    <Input
+                      id="temperature"
+                      name="temperature"
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g., 98.6"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weight">Weight (lbs)</Label>
+                    <Input
+                      id="weight"
+                      name="weight"
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g., 150.5"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsNewRecordDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create Record"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1111,13 +1396,60 @@ export function DoctorDashboard() {
   const [doctorProfile, setDoctorProfile] = useState<Doctor | null>(null)
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isCallingNextPatient, setIsCallingNextPatient] = useState(false)
+  const [queueData, setQueueData] = useState<any>(null)
+  const [queueLoading, setQueueLoading] = useState(false)
   const { user } = useAuth()
 
   useEffect(() => {
     loadDashboardData()
     loadDoctorProfile()
     loadNotifications()
+    loadQueueData()
+    setupWebSocketConnection()
   }, [])
+
+  const setupWebSocketConnection = async () => {
+    try {
+      if (user?.role === 'doctor') {
+        await webSocketService.connect()
+        webSocketService.subscribeToQueueNotifications('doctor', user.id)
+
+        // Listen for patient called notifications
+        const handlePatientCalled = (event: CustomEvent) => {
+          const data = event.detail
+          toast({
+            title: "Patient Called",
+            description: `${data.patientName} (${data.queueNumber}) is on the way to your consultation room`,
+          })
+          // Refresh notifications and dashboard data
+          loadNotifications()
+          loadDashboardData()
+        }
+
+        // Listen for queue status updates
+        const handleQueueUpdate = (event: CustomEvent) => {
+          const data = event.detail
+          console.log('Queue status updated:', data)
+          // Refresh dashboard data and queue info
+          loadDashboardData()
+          loadQueueData()
+        }
+
+        window.addEventListener('patient-called', handlePatientCalled as EventListener)
+        window.addEventListener('queue-status-update', handleQueueUpdate as EventListener)
+
+        // Cleanup function
+        return () => {
+          window.removeEventListener('patient-called', handlePatientCalled as EventListener)
+          window.removeEventListener('queue-status-update', handleQueueUpdate as EventListener)
+          webSocketService.disconnect()
+        }
+      }
+    } catch (error) {
+      console.error('Failed to setup WebSocket connection:', error)
+    }
+  }
 
   const loadDashboardData = async () => {
     try {
@@ -1148,6 +1480,20 @@ export function DoctorDashboard() {
     }
   }
 
+  const loadQueueData = async () => {
+    try {
+      setQueueLoading(true)
+      const data = await doctorService.getQueueStatus()
+      setQueueData(data)
+      console.log("Queue data loaded:", data) // Debug log
+    } catch (error) {
+      console.error("Failed to load queue data:", error)
+      // Don't show error toast for queue loading failure - it's not critical
+    } finally {
+      setQueueLoading(false)
+    }
+  }
+
   const loadNotifications = async () => {
     try {
       const data = await doctorService.getNotifications({ limit: 10 })
@@ -1169,6 +1515,52 @@ export function DoctorDashboard() {
         description: "Failed to mark notification as read",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleCallNextPatient = async () => {
+    try {
+      setIsCallingNextPatient(true)
+
+      // Call the queue service to notify admin that doctor is ready for next patient
+      const response = await doctorService.requestNextPatient({
+        message: `Ready for next patient - ${doctorProfile?.specialization || 'consultation'} room`,
+        urgency: "normal"
+      })
+
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: response.message || "Admin has been notified. Next patient will be called shortly.",
+        })
+
+        // Show next patient info if available
+        if (response.data?.nextPatient) {
+          const nextPatient = response.data.nextPatient
+          toast({
+            title: "Next Patient",
+            description: `${nextPatient.name} (${nextPatient.queueNumber}) - ETA: ${response.data.estimatedWaitTime}`,
+          })
+        }
+
+        // Refresh notifications to see any updates
+        loadNotifications()
+      } else {
+        toast({
+          title: "Info",
+          description: response.message || "No patients in queue at the moment.",
+          variant: "default",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to call next patient:", error)
+      toast({
+        title: "Error",
+        description: "Failed to notify admin. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCallingNextPatient(false)
     }
   }
 
@@ -1201,6 +1593,14 @@ export function DoctorDashboard() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleCallNextPatient}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                  disabled={isCallingNextPatient}
+                >
+                  <UserCheck className="h-4 w-4" />
+                  {isCallingNextPatient ? "Calling..." : "Call Next Patient"}
+                </Button>
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button className="flex items-center gap-2">
@@ -1359,8 +1759,121 @@ export function DoctorDashboard() {
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {/* Today's Appointments */}
+                  {/* Patient Queue */}
                   <Card className="col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        My Patient Queue
+                      </CardTitle>
+                      <CardDescription>Patients currently assigned to you</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {queueLoading ? (
+                        <div className="text-center py-4">
+                          <p className="text-muted-foreground">Loading queue...</p>
+                        </div>
+                      ) : queueData?.currentPatient || queueData?.nextPatients?.length ? (
+                        <>
+                          {/* Current Patient */}
+                          {queueData.currentPatient && (
+                            <div className="p-4 rounded-lg border-2 border-blue-200 bg-blue-50">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+                                  <div>
+                                    <div className="font-medium text-blue-900">
+                                      {queueData.currentPatient.name}
+                                    </div>
+                                    <div className="text-sm text-blue-700">
+                                      Queue #{queueData.currentPatient.queueNumber} • Currently in consultation
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="default" className="bg-blue-600">
+                                  In Progress
+                                </Badge>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Next Patients */}
+                          {queueData.nextPatients?.map((patient: any, index: number) => (
+                            <div
+                              key={patient.id}
+                              className="flex items-center justify-between p-3 rounded-lg border"
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium">
+                                  {index + 1}
+                                </div>
+                                <div>
+                                  <div className="font-medium">{patient.name}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Queue #{patient.queueNumber} • Priority: {patient.priority}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Waiting: {patient.waitingTime} min • ETA: {patient.estimatedTime}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Badge
+                                  variant={patient.priority === 'high' ? 'destructive' :
+                                          patient.priority === 'medium' ? 'default' : 'secondary'}
+                                >
+                                  {patient.priority}
+                                </Badge>
+                                <Badge variant="outline">
+                                  {patient.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Queue Actions */}
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              onClick={handleCallNextPatient}
+                              disabled={isCallingNextPatient || !queueData?.hasWaitingPatients}
+                              size="sm"
+                            >
+                              {isCallingNextPatient ? (
+                                <>
+                                  <Clock className="mr-2 h-4 w-4 animate-spin" />
+                                  Calling...
+                                </>
+                              ) : (
+                                <>
+                                  <Bell className="mr-2 h-4 w-4" />
+                                  Call Next Patient
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={loadQueueData}
+                            >
+                              <RotateCcw className="mr-2 h-4 w-4" />
+                              Refresh Queue
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Users className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                          <p className="text-muted-foreground mt-2">No patients in your queue</p>
+                          <p className="text-sm text-muted-foreground">
+                            Patients will appear here when assigned to you
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Today's Appointments */}
+                  <Card>
                     <CardHeader>
                       <CardTitle>Today's Appointments</CardTitle>
                       <CardDescription>Your scheduled appointments for today</CardDescription>
@@ -1442,7 +1955,7 @@ export function DoctorDashboard() {
                   </Card>
 
                   {/* Recent Patients */}
-                  <Card>
+                  <Card className="col-span-1">
                     <CardHeader>
                       <CardTitle>Recent Patients</CardTitle>
                       <CardDescription>Recently seen patients</CardDescription>

@@ -9,6 +9,7 @@ import { PatientsPage } from "@/components/patients-page"
 import { AnalyticsPage } from "@/components/analytics-page"
 import { DoctorsPage } from "@/components/doctors-page"
 import { SettingsPage } from "@/components/settings-page"
+import { QueueManagement } from "@/components/queue-management"
 import { motion } from "framer-motion"
 import { adminService } from "@/services/admin.service"
 import { useAuth } from "@/hooks/use-auth"
@@ -85,6 +86,7 @@ export function AdminDashboard() {
           {activeTab === "patients" && <PatientsPage />}
           {activeTab === "analytics" && <AnalyticsPage />}
           {activeTab === "doctors" && <DoctorsPage />}
+          {activeTab === "queue" && <QueueManagement />}
           {activeTab === "settings" && <SettingsPage />}
         </motion.div>
       </main>
