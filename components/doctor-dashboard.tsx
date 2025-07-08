@@ -524,12 +524,12 @@ function DoctorPatients() {
   const loadPatients = async () => {
     try {
       setLoading(true)
-      const data = await doctorService.getPatients({ search: searchTerm, limit: 20, page: 1 })
+      const data = await doctorService.getMyPatients({ search: searchTerm, limit: 20, page: 1 })
       setPatients(data.patients)
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to load patients",
+        description: "Failed to load assigned patients",
         variant: "destructive",
       })
     } finally {
