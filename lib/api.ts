@@ -78,12 +78,15 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        // Check for unauthorized response
-        if (response.status === 401 ||
-            (data.success === false && data.message === "Not authorized, no token") ||
-            (data.success === false && data.message?.toLowerCase().includes("unauthorized")) ||
-            (data.success === false && data.message?.toLowerCase().includes("token")) ||
-            (data.success === false && data.message?.toLowerCase().includes("expired"))) {
+        // Only clear tokens for actual authentication errors, not 404s or other errors
+        if (response.status === 401 &&
+            (data.success === false &&
+             (data.message === "Not authorized, no token" ||
+              data.message === "Unauthorized access" ||
+              data.error === "UNAUTHORIZED" ||
+              data.message?.toLowerCase().includes("unauthorized") ||
+              data.message?.toLowerCase().includes("token") ||
+              data.message?.toLowerCase().includes("expired")))) {
 
           console.warn("Authentication failed, clearing token and redirecting to login")
 
@@ -97,6 +100,11 @@ class ApiClient {
 
           // Throw a specific auth error
           throw new Error("UNAUTHORIZED")
+        }
+
+        // For 404 errors, don't clear tokens - just throw the error
+        if (response.status === 404) {
+          throw new Error(`Endpoint not found: ${url}`)
         }
 
         throw new Error(data.message || "API request failed")

@@ -83,7 +83,7 @@ export function AuthForm({ userType }: AuthFormProps) {
           <Input
             id="email"
             type="email"
-            placeholder={`${userType} email`}
+            placeholder={`email address`}
             required
             disabled={loading}
             className="h-12"
@@ -120,7 +120,7 @@ export function AuthForm({ userType }: AuthFormProps) {
           </Label>
         </div>
         <Button type="submit" className="w-full h-12 text-lg" disabled={loading}>
-          {loading ? "Signing in..." : `Sign in as ${userType}`}
+          {loading ? "Signing in..." : `Sign in`}
         </Button>
       </form>
 

@@ -527,6 +527,7 @@ function DoctorPatients() {
       const data = await doctorService.getMyPatients({ search: searchTerm, limit: 20, page: 1 })
       setPatients(data.patients)
     } catch (error) {
+      console.error("Error loading patients:", error)
       toast({
         title: "Error",
         description: "Failed to load assigned patients",

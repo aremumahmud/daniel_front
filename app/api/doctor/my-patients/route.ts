@@ -109,6 +109,12 @@ mockDoctorPatientAssignments.set("770g0622-g4bd-63f6-c938-668877662222", [
   "660f9511-f3ac-52e5-b827-557766551111"  // Jane Smith
 ])
 
+// Doctor ID: 990i2844-i6df-85h8-e150-880099884444 (aremumahmud20031@gmail.com) is assigned to patients
+mockDoctorPatientAssignments.set("990i2844-i6df-85h8-e150-880099884444", [
+  "550e8400-e29b-41d4-a716-446655440000", // John Doe
+  "660f9511-f3ac-52e5-b827-557766551111"  // Jane Smith
+])
+
 // Helper function to extract JWT token and user info
 function extractUserFromToken(authHeader: string | null) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -127,7 +133,7 @@ function extractUserFromToken(authHeader: string | null) {
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
-    
+
     // Authenticate user
     const user = extractUserFromToken(authHeader)
     if (!user || user.role !== 'doctor') {
@@ -155,9 +161,9 @@ export async function GET(request: NextRequest) {
 
     // Get patients assigned to this doctor
     const assignedPatientIds = mockDoctorPatientAssignments.get(doctorId) || []
-    
+
     // Filter patients based on assignments - only return patients assigned to this doctor
-    let myPatients = Array.from(mockPatients.values()).filter((patient: any) => 
+    let myPatients = Array.from(mockPatients.values()).filter((patient: any) =>
       assignedPatientIds.includes(patient._id)
     )
 

@@ -4,7 +4,7 @@
 
 Complete API documentation with exact request and response objects for all Doctor Dashboard endpoints.
 
-**Base URL:** `http://localhost:5000/api`  
+**Base URL:** `http://localhost:8080/api`  
 **Authentication:** Bearer Token (Doctor Role Required)  
 **Content-Type:** `application/json`
 

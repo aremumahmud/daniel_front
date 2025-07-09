@@ -52,7 +52,7 @@ export function AuthPage() {
               <ChevronLeft className="h-6 w-6" />
             </button>
             <div className="text-center">
-              <h2 className="text-2xl font-semibold text-foreground">{activeUserType} Login</h2>
+              <h2 className="text-2xl font-semibold text-foreground">Login into your account</h2>
               <p className="text-sm text-muted-foreground">Sign in to your account</p>
             </div>
             <button
