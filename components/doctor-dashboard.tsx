@@ -1484,12 +1484,21 @@ export function DoctorDashboard() {
   const loadQueueData = async () => {
     try {
       setQueueLoading(true)
-      const data = await doctorService.getQueueStatus()
+      // Use the new getDoctorQueue method for better queue data
+      const data = await doctorService.getDoctorQueue()
       setQueueData(data)
       console.log("Queue data loaded:", data) // Debug log
     } catch (error) {
       console.error("Failed to load queue data:", error)
-      // Don't show error toast for queue loading failure - it's not critical
+      // Fallback to the old method if the new one fails
+      try {
+        const fallbackData = await doctorService.getQueueStatus()
+        setQueueData(fallbackData)
+        console.log("Queue data loaded (fallback):", fallbackData)
+      } catch (fallbackError) {
+        console.error("Fallback queue loading also failed:", fallbackError)
+        // Don't show error toast for queue loading failure - it's not critical
+      }
     } finally {
       setQueueLoading(false)
     }
@@ -1767,14 +1776,24 @@ export function DoctorDashboard() {
                         <Users className="h-5 w-5" />
                         My Patient Queue
                       </CardTitle>
-                      <CardDescription>Patients currently assigned to you</CardDescription>
+                      <CardDescription>
+                        Patients currently assigned to you
+                        {queueData && (
+                          <span className="ml-2 text-sm">
+                            • {queueData.queueLength} waiting
+                            {queueData.stats?.averageWaitTime && (
+                              <span> • Avg wait: {Math.round(queueData.stats.averageWaitTime)} min</span>
+                            )}
+                          </span>
+                        )}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {queueLoading ? (
                         <div className="text-center py-4">
                           <p className="text-muted-foreground">Loading queue...</p>
                         </div>
-                      ) : queueData?.currentPatient || queueData?.nextPatients?.length ? (
+                      ) : queueData && (queueData?.currentPatient || queueData?.nextPatients?.length) ? (
                         <>
                           {/* Current Patient */}
                           {queueData.currentPatient && (
@@ -1789,6 +1808,16 @@ export function DoctorDashboard() {
                                     <div className="text-sm text-blue-700">
                                       Queue #{queueData.currentPatient.queueNumber} • Currently in consultation
                                     </div>
+                                    {queueData.currentPatient.reason && (
+                                      <div className="text-sm text-blue-700">
+                                        Reason: {queueData.currentPatient.reason}
+                                      </div>
+                                    )}
+                                    {queueData.currentPatient.symptoms && (
+                                      <div className="text-xs text-blue-600">
+                                        Symptoms: {queueData.currentPatient.symptoms}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                                 <Badge variant="default" className="bg-blue-600">
@@ -1813,6 +1842,16 @@ export function DoctorDashboard() {
                                   <div className="text-sm text-muted-foreground">
                                     Queue #{patient.queueNumber} • Priority: {patient.priority}
                                   </div>
+                                  {patient.reason && (
+                                    <div className="text-sm text-muted-foreground">
+                                      Reason: {patient.reason}
+                                    </div>
+                                  )}
+                                  {patient.symptoms && (
+                                    <div className="text-xs text-muted-foreground">
+                                      Symptoms: {patient.symptoms}
+                                    </div>
+                                  )}
                                   <div className="text-xs text-muted-foreground">
                                     Waiting: {patient.waitingTime} min • ETA: {patient.estimatedTime}
                                   </div>
@@ -1828,6 +1867,11 @@ export function DoctorDashboard() {
                                 <Badge variant="outline">
                                   {patient.status}
                                 </Badge>
+                                {patient.type && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {patient.type}
+                                  </Badge>
+                                )}
                               </div>
                             </div>
                           ))}

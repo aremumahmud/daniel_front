@@ -82,7 +82,7 @@ export function AuthForm({ userType }: AuthFormProps) {
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
-            type="email"
+            
             placeholder={`email address`}
             required
             disabled={loading}

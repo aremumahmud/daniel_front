@@ -592,13 +592,43 @@ class DoctorService {
   }
 
   async getQueueStatus(): Promise<any> {
-    const response = await apiClient.get("/doctor/queue/status")
+    // Get current user to determine doctor ID
+    const currentUser = await this.getCurrentUser()
+    const doctorId = currentUser._id || currentUser.id
+
+    const response = await apiClient.get(`/queue/doctors/${doctorId}`)
 
     if (response.success && response.data) {
       return response.data
     }
 
     throw new Error(response.message || "Failed to get queue status")
+  }
+
+  async getCurrentUser(): Promise<any> {
+    const response = await apiClient.get("/doctor/me")
+
+    if (response.success && response.data) {
+      return response.data.user || response.data
+    }
+
+    throw new Error(response.message || "Failed to get current user")
+  }
+
+  async getDoctorQueue(doctorId?: string): Promise<any> {
+    // If no doctorId provided, get current user's ID
+    if (!doctorId) {
+      const currentUser = await this.getCurrentUser()
+      doctorId = currentUser._id || currentUser.id
+    }
+
+    const response = await apiClient.get(`/queue/doctors/${doctorId}`)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get doctor queue")
   }
 
   async getDoctorAvailability(): Promise<any> {
