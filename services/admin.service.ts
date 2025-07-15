@@ -204,6 +204,7 @@ export interface CreatePatientData {
   firstName: string
   lastName: string
   middleName?: string
+  matricNumber: string
   dateOfBirth: string
   gender: "male" | "female" | "other"
   maritalStatus: "single" | "married" | "divorced" | "widowed"

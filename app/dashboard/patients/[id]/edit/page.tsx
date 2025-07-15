@@ -10,16 +10,9 @@ import { adminService, type PatientDetails, type CreatePatientData } from "@/ser
 import { ArrowLeft, Save } from "lucide-react"
 
 // We'll reuse the form components from add-new-patient-page
-import { 
+import {
   PatientDemographics,
-  ContactInformation,
-  InsuranceAndBilling,
-  MedicalHistory,
-  AdmissionAndVisits,
-  VitalSigns,
-  TestResultsAndReports,
-  DischargeSummary,
-  DigitalDocumentsAndAttachments
+  ContactInformation
 } from "@/components/add-new-patient-page"
 
 interface EditPatientPageProps {
@@ -47,6 +40,7 @@ export default function EditPatientPage({ params }: EditPatientPageProps) {
           firstName: patientData.firstName,
           lastName: patientData.lastName,
           middleName: patientData.middleName || "",
+          matricNumber: patientData.matricNumber || "",
           dateOfBirth: patientData.dateOfBirth,
           gender: patientData.gender,
           maritalStatus: patientData.maritalStatus,
@@ -225,61 +219,7 @@ export default function EditPatientPage({ params }: EditPatientPageProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Insurance & Billing</CardTitle>
-            <CardDescription>Insurance and payment information</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <InsuranceAndBilling 
-              formData={formData} 
-              updateField={updateField} 
-              updateNestedField={updateNestedField} 
-            />
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Medical History</CardTitle>
-            <CardDescription>Patient medical background and history</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <MedicalHistory 
-              formData={formData} 
-              updateField={updateField} 
-              updateNestedField={updateNestedField} 
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Current Admission</CardTitle>
-            <CardDescription>Current visit and admission details</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AdmissionAndVisits 
-              formData={formData} 
-              updateField={updateField} 
-              updateNestedField={updateNestedField} 
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Vital Signs</CardTitle>
-            <CardDescription>Latest vital signs and measurements</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <VitalSigns 
-              formData={formData} 
-              updateField={updateField} 
-              updateNestedField={updateNestedField} 
-            />
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
