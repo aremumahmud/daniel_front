@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Users, FileText, Activity, Bell, Plus, Search, Filter, Clock, MapPin, Phone, Mail, Star, TrendingUp, DollarSign, MessageSquare, Settings, Stethoscope, Edit, UserCheck, RotateCcw } from "lucide-react"
+import { Calendar, Users, FileText, Activity, Bell, Plus, Search, Filter, Clock, MapPin, Phone, Mail, Star, TrendingUp, DollarSign, MessageSquare, Settings, Stethoscope, Edit, UserCheck, RotateCcw, Play, Square, Coffee, CheckCircle, AlertCircle, Timer, UserPlus } from "lucide-react"
 import { DoctorSideNav } from "@/components/doctor-side-nav"
 import { DoctorAppointments } from "@/components/doctor-appointments"
 import { DoctorSettingsPage } from "@/components/doctor-settings-page"
@@ -516,21 +516,31 @@ function DoctorPatients() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false)
   const [schedulePatient, setSchedulePatient] = useState<Patient | null>(null)
+  const [isNewRecordDialogOpen, setIsNewRecordDialogOpen] = useState(false)
+  const [recordPatient, setRecordPatient] = useState<Patient | null>(null)
+  const [isSubmittingRecord, setIsSubmittingRecord] = useState(false)
+  const [patientRecords, setPatientRecords] = useState<any[]>([])
+  const [isViewingRecords, setIsViewingRecords] = useState(false)
+  const [recordsPatient, setRecordsPatient] = useState<Patient | null>(null)
+  const [showMyPatientsOnly, setShowMyPatientsOnly] = useState(false) // Default to showing all patients
 
   useEffect(() => {
     loadPatients()
-  }, [searchTerm])
+  }, [searchTerm, showMyPatientsOnly])
 
   const loadPatients = async () => {
     try {
       setLoading(true)
-      const data = await doctorService.getMyPatients({ search: searchTerm, limit: 20, page: 1 })
+      // Default to showing all patients, with option to filter to assigned patients only
+      const data = showMyPatientsOnly
+        ? await doctorService.getMyPatients({ search: searchTerm, limit: 50, page: 1 })
+        : await doctorService.getPatients({ search: searchTerm, limit: 50, page: 1 })
       setPatients(data.patients)
     } catch (error) {
       console.error("Error loading patients:", error)
       toast({
         title: "Error",
-        description: "Failed to load assigned patients",
+        description: `Failed to load ${showMyPatientsOnly ? 'assigned' : 'all'} patients`,
         variant: "destructive",
       })
     } finally {
@@ -565,14 +575,14 @@ function DoctorPatients() {
   const handleCreateAppointment = async (formData: FormData) => {
     try {
       const appointmentData = {
-        patientId: schedulePatient?._id,
+        patientId: schedulePatient?._id!,
         appointmentDate: formData.get("date") as string,
         appointmentTime: formData.get("time") as string,
         durationMinutes: parseInt(formData.get("duration") as string) || 30,
-        type: formData.get("type") as string,
+        type: (formData.get("type") as string) as "consultation" | "follow-up" | "check-up" | "emergency",
         reason: formData.get("reason") as string,
         notes: formData.get("notes") as string,
-        priority: formData.get("priority") as string || "medium",
+        priority: (formData.get("priority") as string || "medium") as "low" | "medium" | "high",
         location: formData.get("location") as string || "clinic",
       }
 
@@ -594,21 +604,119 @@ function DoctorPatients() {
     }
   }
 
+  // Medical Record Functions
+  const handleCreateMedicalRecord = async (formData: FormData) => {
+    try {
+      setIsSubmittingRecord(true)
+
+      const recordData = {
+        patientId: recordPatient?._id!,
+        recordType: (formData.get('recordType') as string) as "consultation" | "lab-result" | "prescription" | "diagnosis",
+        chiefComplaint: formData.get('chiefComplaint') as string,
+        presentIllness: formData.get('presentIllness') as string || '',
+        physicalExamination: formData.get('physicalExamination') as string || '',
+        diagnosis: [
+          {
+            primary: true,
+            code: formData.get('diagnosisCode') as string || "Z00.00",
+            description: formData.get('diagnosis') as string
+          }
+        ],
+        treatment: formData.get('treatment') as string,
+        medications: formData.get('medicationName') ? [
+          {
+            name: formData.get('medicationName') as string,
+            dosage: formData.get('medicationDosage') as string,
+            frequency: formData.get('medicationFrequency') as string,
+            duration: formData.get('medicationDuration') as string,
+            instructions: formData.get('medicationInstructions') as string || ''
+          }
+        ] : [],
+        vitalSigns: {
+          bloodPressure: {
+            systolic: parseInt(formData.get('systolic') as string) || 0,
+            diastolic: parseInt(formData.get('diastolic') as string) || 0
+          },
+          heartRate: parseInt(formData.get('heartRate') as string) || 0,
+          temperature: parseFloat(formData.get('temperature') as string) || 0,
+          weight: parseFloat(formData.get('weight') as string) || 0
+        }
+      }
+
+      await doctorService.createMedicalRecord(recordData)
+
+      toast({
+        title: "Success",
+        description: "Medical record created successfully",
+      })
+
+      setIsNewRecordDialogOpen(false)
+      setRecordPatient(null)
+
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create medical record",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmittingRecord(false)
+    }
+  }
+
+  const handleViewMedicalRecords = async (patient: Patient) => {
+    try {
+      setRecordsPatient(patient)
+      setIsViewingRecords(true)
+
+      const response = await doctorService.getMedicalRecords({
+        patientId: patient._id,
+        limit: 20,
+        page: 1
+      })
+      setPatientRecords(response.records)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load medical records",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleAddMedicalRecord = (patient: Patient) => {
+    setRecordPatient(patient)
+    setIsNewRecordDialogOpen(true)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">All Patients</h1>
+        <div>
+          <h1 className="text-3xl font-bold">
+            All Patients
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {showMyPatientsOnly
+              ? `Showing ${patients.length} assigned patients`
+              : `Showing ${patients.length} patients in the system`
+            }
+          </p>
+        </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button
+            variant={showMyPatientsOnly ? "default" : "outline"}
+            onClick={() => setShowMyPatientsOnly(!showMyPatientsOnly)}
+          >
             <Filter className="mr-2 h-4 w-4" />
-            My Patients Only
+            {showMyPatientsOnly ? 'Show All Patients' : 'Filter: My Patients Only'}
           </Button>
         </div>
       </div>
 
       <div className="mb-4">
         <Input
-          placeholder="Search patients by name, email, or phone..."
+          placeholder={showMyPatientsOnly ? "Search my patients by name, email, or phone..." : "Search all patients by name, email, or phone..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
@@ -678,6 +786,22 @@ function DoctorPatients() {
                         onClick={() => handleViewPatient(patient)}
                       >
                         View Details
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewMedicalRecords(patient)}
+                      >
+                        <FileText className="mr-1 h-3 w-3" />
+                        View Records
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddMedicalRecord(patient)}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Add Record
                       </Button>
                       <Button
                         size="sm"
@@ -997,7 +1121,12 @@ function DoctorPatients() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-muted-foreground">Treatment Plan</Label>
-                      <p className="text-sm">{selectedPatient.admission.treatmentPlan}</p>
+                      <p className="text-sm">
+                        {typeof selectedPatient.admission?.treatmentPlan === 'object'
+                          ? JSON.stringify(selectedPatient.admission.treatmentPlan, null, 2)
+                          : selectedPatient.admission?.treatmentPlan || "Not specified"
+                        }
+                      </p>
                     </div>
                     {selectedPatient.admission.labTestsOrdered?.length > 0 && (
                       <div>
@@ -1075,11 +1204,21 @@ function DoctorPatients() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-muted-foreground">Medications for Home</Label>
-                      <p>{selectedPatient.dischargeSummary.medicationsForHome}</p>
+                      <p>
+                        {typeof selectedPatient.dischargeSummary?.medicationsForHome === 'object'
+                          ? JSON.stringify(selectedPatient.dischargeSummary.medicationsForHome, null, 2)
+                          : selectedPatient.dischargeSummary?.medicationsForHome || "Not specified"
+                        }
+                      </p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-muted-foreground">Discharge Instructions</Label>
-                      <p>{selectedPatient.dischargeSummary.dischargeInstructions}</p>
+                      <p>
+                        {typeof selectedPatient.dischargeSummary?.dischargeInstructions === 'object'
+                          ? JSON.stringify(selectedPatient.dischargeSummary.dischargeInstructions, null, 2)
+                          : selectedPatient.dischargeSummary?.dischargeInstructions || "Not specified"
+                        }
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -1266,6 +1405,314 @@ function DoctorPatients() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Add Medical Record Dialog */}
+      <Dialog open={isNewRecordDialogOpen} onOpenChange={setIsNewRecordDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Medical Record</DialogTitle>
+            <DialogDescription>
+              Create a new medical record for {recordPatient?.userId?.fullName}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            handleCreateMedicalRecord(new FormData(e.currentTarget))
+          }}>
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recordType">Record Type</Label>
+                  <Select name="recordType" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select record type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="consultation">Consultation</SelectItem>
+                      <SelectItem value="lab-result">Lab Result</SelectItem>
+                      <SelectItem value="prescription">Prescription</SelectItem>
+                      <SelectItem value="diagnosis">Diagnosis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Chief Complaint and Present Illness */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chiefComplaint">Chief Complaint</Label>
+                  <Textarea
+                    id="chiefComplaint"
+                    name="chiefComplaint"
+                    placeholder="Why did the patient come in?"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="presentIllness">Present Illness</Label>
+                  <Textarea
+                    id="presentIllness"
+                    name="presentIllness"
+                    placeholder="History of present illness"
+                  />
+                </div>
+              </div>
+
+              {/* Physical Examination and Diagnosis */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="physicalExamination">Physical Examination</Label>
+                  <Textarea
+                    id="physicalExamination"
+                    name="physicalExamination"
+                    placeholder="Physical examination findings"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="diagnosis">Diagnosis</Label>
+                    <Input
+                      id="diagnosis"
+                      name="diagnosis"
+                      placeholder="Primary diagnosis"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="diagnosisCode">Diagnosis Code</Label>
+                    <Input
+                      id="diagnosisCode"
+                      name="diagnosisCode"
+                      placeholder="ICD-10 code (optional)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Treatment */}
+              <div className="space-y-2">
+                <Label htmlFor="treatment">Treatment Plan</Label>
+                <Textarea
+                  id="treatment"
+                  name="treatment"
+                  placeholder="Treatment plan and recommendations"
+                  required
+                />
+              </div>
+
+              {/* Medications */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Medications (Optional)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationName">Medication Name</Label>
+                    <Input
+                      id="medicationName"
+                      name="medicationName"
+                      placeholder="e.g., Ibuprofen"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationDosage">Dosage</Label>
+                    <Input
+                      id="medicationDosage"
+                      name="medicationDosage"
+                      placeholder="e.g., 400mg"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationFrequency">Frequency</Label>
+                    <Input
+                      id="medicationFrequency"
+                      name="medicationFrequency"
+                      placeholder="e.g., twice daily"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="medicationDuration">Duration</Label>
+                    <Input
+                      id="medicationDuration"
+                      name="medicationDuration"
+                      placeholder="e.g., 7 days"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="medicationInstructions">Instructions</Label>
+                  <Input
+                    id="medicationInstructions"
+                    name="medicationInstructions"
+                    placeholder="e.g., Take with food"
+                  />
+                </div>
+              </div>
+
+              {/* Vital Signs */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Vital Signs (Optional)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="systolic">Blood Pressure (Systolic)</Label>
+                    <Input
+                      id="systolic"
+                      name="systolic"
+                      type="number"
+                      placeholder="e.g., 120"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="diastolic">Blood Pressure (Diastolic)</Label>
+                    <Input
+                      id="diastolic"
+                      name="diastolic"
+                      type="number"
+                      placeholder="e.g., 80"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="heartRate">Heart Rate (bpm)</Label>
+                    <Input
+                      id="heartRate"
+                      name="heartRate"
+                      type="number"
+                      placeholder="e.g., 72"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="temperature">Temperature (°F)</Label>
+                    <Input
+                      id="temperature"
+                      name="temperature"
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g., 98.6"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weight">Weight (lbs)</Label>
+                    <Input
+                      id="weight"
+                      name="weight"
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g., 150.5"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsNewRecordDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmittingRecord}>
+                {isSubmittingRecord ? "Creating..." : "Create Record"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Medical Records Dialog */}
+      <Dialog open={isViewingRecords} onOpenChange={setIsViewingRecords}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Medical Records</DialogTitle>
+            <DialogDescription>
+              Medical records for {recordsPatient?.userId?.fullName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {patientRecords.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                <p className="text-muted-foreground mt-2">No medical records found</p>
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => {
+                    setIsViewingRecords(false)
+                    if (recordsPatient) {
+                      handleAddMedicalRecord(recordsPatient)
+                    }
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create First Record
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {patientRecords.map((record) => (
+                  <Card key={record._id}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{record.recordType}</Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(record.visitDate || record.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h3 className="font-semibold">{record.chiefComplaint}</h3>
+                          <p className="text-sm text-muted-foreground">{record.diagnosis?.[0]?.description}</p>
+                          {record.treatment && (
+                            <p className="text-sm">
+                              <strong>Treatment:</strong> {
+                                typeof record.treatment === 'object'
+                                  ? JSON.stringify(record.treatment, null, 2)
+                                  : record.treatment
+                              }
+                            </p>
+                          )}
+                          {record.medications && record.medications.length > 0 && (
+                            <div className="text-sm">
+                              <strong>Medications:</strong>
+                              <ul className="list-disc list-inside ml-2">
+                                {record.medications.map((med: any, index: number) => (
+                                  <li key={index}>
+                                    {med.name} - {med.dosage} ({med.frequency}) for {med.duration}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                        <Button variant="outline" size="sm">
+                          View Details
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsViewingRecords(false)
+                if (recordsPatient) {
+                  handleAddMedicalRecord(recordsPatient)
+                }
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add New Record
+            </Button>
+            <Button onClick={() => setIsViewingRecords(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1400,6 +1847,13 @@ export function DoctorDashboard() {
   const [isCallingNextPatient, setIsCallingNextPatient] = useState(false)
   const [queueData, setQueueData] = useState<any>(null)
   const [queueLoading, setQueueLoading] = useState(false)
+  const [doctorStatus, setDoctorStatus] = useState<any>(null)
+  const [isOnBreak, setIsOnBreak] = useState(false)
+  const [breakType, setBreakType] = useState<string>('')
+  const [isStartingConsultation, setIsStartingConsultation] = useState<string | null>(null)
+  const [isCompletingConsultation, setIsCompletingConsultation] = useState<string | null>(null)
+  const [isAcceptingPatient, setIsAcceptingPatient] = useState(false)
+  const [isManagingBreak, setIsManagingBreak] = useState(false)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -1407,6 +1861,7 @@ export function DoctorDashboard() {
     loadDoctorProfile()
     loadNotifications()
     loadQueueData()
+    loadDoctorStatus()
     setupWebSocketConnection()
   }, [])
 
@@ -1481,24 +1936,87 @@ export function DoctorDashboard() {
     }
   }
 
+  const loadDoctorStatus = async () => {
+    try {
+      const response = await doctorService.getDoctorStatus()
+      setDoctorStatus(response)
+      setIsOnBreak(response.isOnBreak || false)
+      setBreakType(response.breakType || '')
+    } catch (error) {
+      console.error("Failed to load doctor status:", error)
+    }
+  }
+
   const loadQueueData = async () => {
     try {
       setQueueLoading(true)
-      // Use the new getDoctorQueue method for better queue data
-      const data = await doctorService.getDoctorQueue()
-      setQueueData(data)
-      console.log("Queue data loaded:", data) // Debug log
+      // Use the getCurrentPatients method to get real queue data
+      const response = await doctorService.getDoctorQueue()
+
+      console.log("Queue data loaded123:", response)
+
+      if (response &&  response.patients) {
+        const patients = response.patients
+
+        console.log("Raw API response:", response)
+
+        // Transform the real API data to match dashboard expectations
+        const transformedData = {
+          queueLength: response.count,
+          currentPatient: patients.find((p: any) => p.status === 'in-consultation') ? {
+            name: patients.find((p: any) => p.status === 'in-consultation')?.patientName,
+            queueNumber: patients.find((p: any) => p.status === 'in-consultation')?.queueId?.slice(0, 8),
+            reason: patients.find((p: any) => p.status === 'in-consultation')?.reason,
+            symptoms: null, // Not provided in current API
+            id: patients.find((p: any) => p.status === 'in-consultation')?.patientId,
+            queueId: patients.find((p: any) => p.status === 'in-consultation')?.queueId
+          } : null,
+          nextPatients: patients
+            .filter((p: any) => p.status === 'assigned')
+            .map((patient: any, index: number) => ({
+              id: patient.patientId,
+              name: patient.patientName,
+              queueNumber: patient.queueId.slice(0, 8),
+              queueId: patient.queueId,
+              priority: patient.priority,
+              reason: patient.reason,
+              symptoms: null, // Not provided in current API
+              status: patient.status,
+              waitingTime: Math.floor(patient.timeInQueue / 60), // Convert seconds to minutes
+              estimatedTime: `${Math.floor(patient.timeInQueue / 60)} min`,
+              type: 'consultation' // Default type
+            })),
+          hasWaitingPatients: patients.filter((p: any) => p.status === 'assigned').length > 0,
+          stats: {
+            averageWaitTime: patients.length > 0 ?
+              patients.reduce((sum: number, p: any) => sum + Math.floor(p.timeInQueue / 60), 0) / patients.length : 0
+          }
+        }
+
+        setQueueData(transformedData)
+        console.log("Raw API response:", response)
+        console.log("Transformed queue data:", transformedData)
+        console.log("Number of patients:", patients.length)
+      } else {
+        // No patients data
+        setQueueData({
+          queueLength: 0,
+          currentPatient: null,
+          nextPatients: [],
+          hasWaitingPatients: false,
+          stats: { averageWaitTime: 0 }
+        })
+      }
     } catch (error) {
       console.error("Failed to load queue data:", error)
-      // Fallback to the old method if the new one fails
-      try {
-        const fallbackData = await doctorService.getQueueStatus()
-        setQueueData(fallbackData)
-        console.log("Queue data loaded (fallback):", fallbackData)
-      } catch (fallbackError) {
-        console.error("Fallback queue loading also failed:", fallbackError)
-        // Don't show error toast for queue loading failure - it's not critical
-      }
+      // Fallback to empty queue data
+      setQueueData({
+        queueLength: 0,
+        currentPatient: null,
+        nextPatients: [],
+        hasWaitingPatients: false,
+        stats: { averageWaitTime: 0 }
+      })
     } finally {
       setQueueLoading(false)
     }
@@ -1571,6 +2089,179 @@ export function DoctorDashboard() {
       })
     } finally {
       setIsCallingNextPatient(false)
+    }
+  }
+
+  // Accept next patient from queue
+  const handleAcceptNextPatient = async () => {
+    try {
+      setIsAcceptingPatient(true)
+
+      // Get the next waiting patient from the queue
+      const queueStatus = await doctorService.getQueueStatus()
+      const nextPatient = queueStatus.queue?.find((p: any) => p.status === 'waiting')
+
+      if (!nextPatient) {
+        toast({
+          title: "No Patients",
+          description: "No patients are currently waiting in the queue.",
+          variant: "default",
+        })
+        return
+      }
+
+      // Assign the patient to this doctor
+      const response = await doctorService.assignPatientToSelf(nextPatient._id)
+
+      if (response) {
+        toast({
+          title: "Patient Assigned",
+          description: `${response.patient?.firstName} ${response.patient?.lastName} has been assigned to you.`,
+        })
+
+        // Refresh queue data
+        loadQueueData()
+      }
+    } catch (error) {
+      console.error("Error accepting patient:", error)
+      toast({
+        title: "Error",
+        description: "Failed to accept next patient. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAcceptingPatient(false)
+    }
+  }
+
+  // Start consultation for a patient
+  const handleStartConsultation = async (queueId: string) => {
+    try {
+      setIsStartingConsultation(queueId)
+
+      const response = await doctorService.updatePatientStatus(queueId, {
+        status: 'in-consultation',
+        notes: 'Consultation started',
+        startTime: new Date().toISOString()
+      })
+
+      if (response) {
+        toast({
+          title: "Consultation Started",
+          description: "Patient consultation has been started successfully.",
+        })
+
+        // Refresh queue data
+        loadQueueData()
+      }
+    } catch (error) {
+      console.error("Error starting consultation:", error)
+      toast({
+        title: "Error",
+        description: "Failed to start consultation. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsStartingConsultation(null)
+    }
+  }
+
+  // Complete consultation for a patient
+  const handleCompleteConsultation = async (queueId: string) => {
+    try {
+      setIsCompletingConsultation(queueId)
+
+      const response = await doctorService.updatePatientStatus(queueId, {
+        status: 'completed',
+        notes: 'Consultation completed successfully',
+        completedAt: new Date().toISOString(),
+        consultationSummary: {
+          diagnosis: 'Consultation completed',
+          treatment: 'As discussed',
+          followUp: 'As needed'
+        }
+      })
+
+      if (response) {
+        toast({
+          title: "Consultation Completed",
+          description: "Patient consultation has been completed successfully.",
+        })
+
+        // Refresh queue data
+        loadQueueData()
+      }
+    } catch (error) {
+      console.error("Error completing consultation:", error)
+      toast({
+        title: "Error",
+        description: "Failed to complete consultation. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCompletingConsultation(null)
+    }
+  }
+
+  // Break management functions
+  const handleStartBreak = async (breakType: string, duration: number = 15) => {
+    try {
+      setIsManagingBreak(true)
+
+      const response = await doctorService.startBreak({
+        isOnBreak: true,
+        breakType: breakType as any,
+        duration,
+        notes: `${breakType} break started`
+      })
+
+      if (response) {
+        toast({
+          title: "Break Started",
+          description: `${breakType.charAt(0).toUpperCase() + breakType.slice(1)} break started successfully.`,
+        })
+
+        setIsOnBreak(true)
+        setBreakType(breakType)
+        loadDoctorStatus()
+      }
+    } catch (error) {
+      console.error("Error starting break:", error)
+      toast({
+        title: "Error",
+        description: "Failed to start break. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsManagingBreak(false)
+    }
+  }
+
+  const handleEndBreak = async () => {
+    try {
+      setIsManagingBreak(true)
+
+      const response = await doctorService.endBreak()
+
+      if (response) {
+        toast({
+          title: "Break Ended",
+          description: "You are now available for patients.",
+        })
+
+        setIsOnBreak(false)
+        setBreakType('')
+        loadDoctorStatus()
+      }
+    } catch (error) {
+      console.error("Error ending break:", error)
+      toast({
+        title: "Error",
+        description: "Failed to end break. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsManagingBreak(false)
     }
   }
 
@@ -1769,6 +2460,224 @@ export function DoctorDashboard() {
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {/* Queue Management Actions */}
+                  <Card className="col-span-full">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Stethoscope className="h-5 w-5" />
+                        Queue Management
+                      </CardTitle>
+                      <CardDescription>
+                        Manage your patient queue and consultation workflow
+                        {doctorStatus && (
+                          <span className="ml-2 text-sm">
+                            • Status: <span className={`font-medium ${
+                              isOnBreak ? 'text-orange-600' :
+                              doctorStatus.isAvailable ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {isOnBreak ? `On ${breakType} break` :
+                               doctorStatus.isAvailable ? 'Available' : 'Busy'}
+                            </span>
+                            {doctorStatus.currentPatients !== undefined && (
+                              <span> • Load: {doctorStatus.currentPatients}/{doctorStatus.maxPatients}</span>
+                            )}
+                          </span>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        {/* Accept Next Patient */}
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Accept Patient</h4>
+                          <Button
+                            onClick={handleAcceptNextPatient}
+                            disabled={isAcceptingPatient || isOnBreak}
+                            className="w-full"
+                            variant="default"
+                          >
+                            {isAcceptingPatient ? (
+                              <>
+                                <Timer className="mr-2 h-4 w-4 animate-spin" />
+                                Accepting...
+                              </>
+                            ) : (
+                              <>
+                                <UserPlus className="mr-2 h-4 w-4" />
+                                Accept Next Patient
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Assign the next waiting patient to yourself
+                          </p>
+                        </div>
+
+                        {/* Start Consultation */}
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Start Consultation</h4>
+                          <Button
+                            onClick={() => {
+                              const assignedPatient = queueData?.nextPatients?.[0]
+                              if (assignedPatient) {
+                                handleStartConsultation(assignedPatient.queueId)
+                              } else {
+                                toast({
+                                  title: "No Patient",
+                                  description: "No assigned patient to start consultation with.",
+                                  variant: "default",
+                                })
+                              }
+                            }}
+                            disabled={!queueData?.nextPatients?.length || isStartingConsultation !== null || isOnBreak}
+                            className="w-full"
+                            variant="default"
+                          >
+                            {isStartingConsultation ? (
+                              <>
+                                <Timer className="mr-2 h-4 w-4 animate-spin" />
+                                Starting...
+                              </>
+                            ) : (
+                              <>
+                                <Play className="mr-2 h-4 w-4" />
+                                Start Consultation
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Begin consultation with assigned patient
+                          </p>
+                        </div>
+
+                        {/* Complete Consultation */}
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Complete Consultation</h4>
+                          <Button
+                            onClick={() => {
+                              const currentPatient = queueData?.currentPatient
+                              if (currentPatient) {
+                                handleCompleteConsultation(currentPatient.queueId)
+                              } else {
+                                toast({
+                                  title: "No Active Consultation",
+                                  description: "No consultation is currently in progress.",
+                                  variant: "default",
+                                })
+                              }
+                            }}
+                            disabled={!queueData?.currentPatient || isCompletingConsultation !== null}
+                            className="w-full"
+                            variant="default"
+                          >
+                            {isCompletingConsultation ? (
+                              <>
+                                <Timer className="mr-2 h-4 w-4 animate-spin" />
+                                Completing...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Complete Consultation
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Mark current consultation as completed
+                          </p>
+                        </div>
+
+                        {/* Break Management */}
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Break Management</h4>
+                          {isOnBreak ? (
+                            <Button
+                              onClick={handleEndBreak}
+                              disabled={isManagingBreak}
+                              className="w-full"
+                              variant="outline"
+                            >
+                              {isManagingBreak ? (
+                                <>
+                                  <Timer className="mr-2 h-4 w-4 animate-spin" />
+                                  Ending...
+                                </>
+                              ) : (
+                                <>
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  End Break
+                                </>
+                              )}
+                            </Button>
+                          ) : (
+                            <div className="space-y-1">
+                              <Button
+                                onClick={() => handleStartBreak('lunch', 30)}
+                                disabled={isManagingBreak}
+                                className="w-full"
+                                variant="outline"
+                                size="sm"
+                              >
+                                <Coffee className="mr-2 h-4 w-4" />
+                                Lunch Break
+                              </Button>
+                              <Button
+                                onClick={() => handleStartBreak('break', 15)}
+                                disabled={isManagingBreak}
+                                className="w-full"
+                                variant="outline"
+                                size="sm"
+                              >
+                                <Coffee className="mr-2 h-4 w-4" />
+                                Short Break
+                              </Button>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            {isOnBreak ? 'Return from your current break' : 'Take a scheduled break'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Status Indicators */}
+                      <div className="mt-4 pt-4 border-t">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                isOnBreak ? 'bg-orange-500' :
+                                doctorStatus?.isAvailable ? 'bg-green-500' : 'bg-red-500'
+                              }`} />
+                              <span className="text-muted-foreground">
+                                {isOnBreak ? 'On Break' :
+                                 doctorStatus?.isAvailable ? 'Available' : 'Busy'}
+                              </span>
+                            </div>
+                            {queueData && (
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">
+                                  {queueData.queueLength || 0} patients in queue
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              loadQueueData()
+                              loadDoctorStatus()
+                            }}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Refresh
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Patient Queue */}
                   <Card className="col-span-2">
                     <CardHeader>
@@ -1780,8 +2689,11 @@ export function DoctorDashboard() {
                         Patients currently assigned to you
                         {queueData && (
                           <span className="ml-2 text-sm">
-                            • {queueData.queueLength} waiting
-                            {queueData.stats?.averageWaitTime && (
+                            • {queueData.queueLength || 0} total patients
+                            {queueData.nextPatients?.length > 0 && (
+                              <span> • {queueData.nextPatients.length} waiting</span>
+                            )}
+                            {queueData.stats?.averageWaitTime && queueData.stats.averageWaitTime > 0 && (
                               <span> • Avg wait: {Math.round(queueData.stats.averageWaitTime)} min</span>
                             )}
                           </span>
@@ -1793,7 +2705,7 @@ export function DoctorDashboard() {
                         <div className="text-center py-4">
                           <p className="text-muted-foreground">Loading queue...</p>
                         </div>
-                      ) : queueData && (queueData?.currentPatient || queueData?.nextPatients?.length) ? (
+                      ) : queueData && (queueData?.currentPatient || queueData?.nextPatients?.length > 0) ? (
                         <>
                           {/* Current Patient */}
                           {queueData.currentPatient && (
@@ -1820,18 +2732,38 @@ export function DoctorDashboard() {
                                     )}
                                   </div>
                                 </div>
-                                <Badge variant="default" className="bg-blue-600">
-                                  In Progress
-                                </Badge>
+                                <div className="flex flex-col gap-2">
+                                  <Badge variant="default" className="bg-blue-600">
+                                    In Progress
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleCompleteConsultation(queueData.currentPatient.queueId)}
+                                    disabled={isCompletingConsultation === queueData.currentPatient.queueId}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    {isCompletingConsultation === queueData.currentPatient.queueId ? (
+                                      <>
+                                        <Timer className="mr-2 h-4 w-4 animate-spin" />
+                                        Completing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className="mr-2 h-4 w-4" />
+                                        Complete
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           )}
 
-                          {/* Next Patients */}
+                          {/* Assigned Patients */}
                           {queueData.nextPatients?.map((patient: any, index: number) => (
                             <div
                               key={patient.id}
-                              className="flex items-center justify-between p-3 rounded-lg border"
+                              className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
                             >
                               <div className="flex items-center space-x-3">
                                 <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-medium">
@@ -1840,38 +2772,54 @@ export function DoctorDashboard() {
                                 <div>
                                   <div className="font-medium">{patient.name}</div>
                                   <div className="text-sm text-muted-foreground">
-                                    Queue #{patient.queueNumber} • Priority: {patient.priority}
+                                    Queue ID: {patient.queueNumber}... • Priority: {patient.priority}
                                   </div>
                                   {patient.reason && (
                                     <div className="text-sm text-muted-foreground">
                                       Reason: {patient.reason}
                                     </div>
                                   )}
-                                  {patient.symptoms && (
-                                    <div className="text-xs text-muted-foreground">
-                                      Symptoms: {patient.symptoms}
-                                    </div>
-                                  )}
                                   <div className="text-xs text-muted-foreground">
-                                    Waiting: {patient.waitingTime} min • ETA: {patient.estimatedTime}
+                                    Time in queue: {patient.waitingTime} min
+                                    {patient.estimatedTime && patient.estimatedTime !== `${patient.waitingTime} min` && (
+                                      <span> • ETA: {patient.estimatedTime}</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                <Badge
-                                  variant={patient.priority === 'high' ? 'destructive' :
-                                          patient.priority === 'medium' ? 'default' : 'secondary'}
-                                >
-                                  {patient.priority}
-                                </Badge>
-                                <Badge variant="outline">
-                                  {patient.status}
-                                </Badge>
-                                {patient.type && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {patient.type}
-                                  </Badge>
-                                )}
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center space-x-1">
+                                    <Badge
+                                      variant={patient.priority === 'high' ? 'destructive' :
+                                              patient.priority === 'medium' ? 'default' : 'secondary'}
+                                      className="capitalize text-xs"
+                                    >
+                                      {patient.priority}
+                                    </Badge>
+                                    <Badge variant="outline" className="capitalize text-xs">
+                                      {patient.status}
+                                    </Badge>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleStartConsultation(patient.queueId)}
+                                    disabled={isStartingConsultation === patient.queueId || isOnBreak}
+                                    className="h-7 text-xs"
+                                  >
+                                    {isStartingConsultation === patient.queueId ? (
+                                      <>
+                                        <Timer className="mr-1 h-3 w-3 animate-spin" />
+                                        Starting...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Play className="mr-1 h-3 w-3" />
+                                        Start
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1908,10 +2856,19 @@ export function DoctorDashboard() {
                       ) : (
                         <div className="text-center py-8">
                           <Users className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                          <p className="text-muted-foreground mt-2">No patients in your queue</p>
+                          <p className="text-muted-foreground mt-2">No patients assigned to you</p>
                           <p className="text-sm text-muted-foreground">
-                            Patients will appear here when assigned to you
+                            Patients will appear here when they are assigned to your queue
                           </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={loadQueueData}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Refresh Queue
+                          </Button>
                         </div>
                       )}
                     </CardContent>

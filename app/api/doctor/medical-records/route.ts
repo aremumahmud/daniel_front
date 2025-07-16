@@ -244,27 +244,114 @@ export async function POST(request: NextRequest) {
     // Get patient info
     const patient = mockPatients.get(patientId)
 
-    // Create new medical record
+    // Create comprehensive medical record matching documentation schema
     const newRecord = {
       _id: recordId,
       patientId,
       doctorId,
+      appointmentId: body.appointmentId || null,
+      recordDate: new Date().toISOString(),
       recordType,
-      visitDate: new Date().toISOString(),
+
+      // Clinical Information
       chiefComplaint,
-      presentIllness: presentIllness || "",
+      historyOfPresentIllness: presentIllness || "",
+      reviewOfSystems: body.reviewOfSystems || {},
       physicalExamination: physicalExamination || "",
-      diagnosis: Array.isArray(diagnosis) ? diagnosis : [diagnosis],
-      treatment,
-      medications: medications || [],
-      vitalSigns: vitalSigns || {},
+
+      // Vital Signs (comprehensive structure)
+      vitalSigns: {
+        bloodPressure: vitalSigns?.bloodPressure || { systolic: 0, diastolic: 0 },
+        heartRate: vitalSigns?.heartRate || 0,
+        temperature: vitalSigns?.temperature || 0,
+        respiratoryRate: vitalSigns?.respiratoryRate || 0,
+        oxygenSaturation: vitalSigns?.oxygenSaturation || 0,
+        weight: vitalSigns?.weight || 0,
+        height: vitalSigns?.height || 0,
+        bmi: vitalSigns?.bmi || 0,
+        painScale: vitalSigns?.painScale || 0
+      },
+
+      // Diagnosis (comprehensive structure)
+      diagnosis: {
+        primary: {
+          condition: Array.isArray(diagnosis) ? diagnosis[0] : diagnosis,
+          icdCode: body.icdCode || "",
+          severity: body.severity || "mild",
+          onset: new Date().toISOString(),
+          status: "active"
+        },
+        secondary: body.secondaryDiagnoses || [],
+        differential: body.differentialDiagnoses || []
+      },
+
+      // Treatment Plan
+      treatmentPlan: {
+        medications: medications || [],
+        procedures: body.procedures || [],
+        therapies: body.therapies || []
+      },
+
+      // Additional clinical data
+      labResults: body.labResults || [],
+      imagingStudies: body.imagingStudies || [],
+      referrals: body.referrals || [],
+
+      // Follow-up
+      followUp: {
+        required: body.followUpRequired || false,
+        timeframe: body.followUpTimeframe || "",
+        type: body.followUpType || "office",
+        instructions: body.followUpInstructions || "",
+        scheduledDate: body.followUpDate || null
+      },
+
+      // Doctor Notes
+      doctorNotes: {
+        assessment: body.assessment || treatment || "",
+        plan: body.plan || treatment || "",
+        patientEducation: body.patientEducation || "",
+        warningsSigns: body.warningsSigns || "",
+        additionalNotes: body.additionalNotes || ""
+      },
+
+      // Attachments and Billing
+      attachments: body.attachments || [],
+      billing: {
+        encounterType: body.encounterType || "office visit",
+        cptCodes: body.cptCodes || [],
+        icdCodes: body.icdCodes || [],
+        modifiers: body.modifiers || [],
+        levelOfService: body.levelOfService || "1"
+      },
+
+      // Record Management
+      status: body.status || "completed",
+      isArchived: false,
+      confidentialityLevel: body.confidentialityLevel || "normal",
+
+      // Audit Trail
+      amendments: [],
+      reviewedBy: null,
+      reviewedAt: null,
+      reviewNotes: "",
+
+      // Timestamps
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: doctorId,
+      lastModifiedBy: doctorId,
+
+      // Patient info for compatibility
       patient: patient ? {
         userId: {
           fullName: `${patient.firstName} ${patient.lastName}`
         }
       } : null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+
+      // Legacy fields for backward compatibility
+      visitDate: new Date().toISOString(),
+      treatment
     }
 
     // Store the new record
@@ -282,6 +369,111 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "Failed to create medical record",
+        error: error instanceof Error ? error.message : "Unknown error"
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+
+    // Authenticate user
+    const user = extractUserFromToken(authHeader)
+    if (!user || user.role !== 'doctor') {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized access",
+          error: "UNAUTHORIZED"
+        },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const { recordId, ...updateData } = body
+
+    if (!recordId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Record ID is required",
+          error: "VALIDATION_ERROR"
+        },
+        { status: 400 }
+      )
+    }
+
+    // Get the doctor's ID from the token
+    const doctorId = user.userId || user.id
+
+    // Get existing record
+    const existingRecord = mockMedicalRecords.get(recordId)
+    if (!existingRecord) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Medical record not found",
+          error: "RECORD_NOT_FOUND"
+        },
+        { status: 404 }
+      )
+    }
+
+    // Check if doctor owns this record
+    if (existingRecord.doctorId !== doctorId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Access denied. You can only update your own records.",
+          error: "FORBIDDEN"
+        },
+        { status: 403 }
+      )
+    }
+
+    // Update the record
+    const updatedRecord = {
+      ...existingRecord,
+      ...updateData,
+      _id: recordId, // Ensure ID doesn't change
+      doctorId: doctorId, // Ensure doctor ID doesn't change
+      updatedAt: new Date().toISOString(),
+      lastModifiedBy: doctorId
+    }
+
+    // Store updated record
+    mockMedicalRecords.set(recordId, updatedRecord)
+
+    // Get patient info for response
+    const patient = mockPatients.get(updatedRecord.patientId)
+
+    const enrichedRecord = {
+      ...updatedRecord,
+      patient: patient ? {
+        userId: {
+          fullName: `${patient.firstName} ${patient.lastName}`
+        }
+      } : null
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Medical record updated successfully",
+      data: {
+        record: enrichedRecord
+      }
+    })
+
+  } catch (error) {
+    console.error('Error updating medical record:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to update medical record",
         error: error instanceof Error ? error.message : "Unknown error"
       },
       { status: 500 }

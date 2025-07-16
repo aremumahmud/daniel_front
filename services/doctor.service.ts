@@ -1,6 +1,94 @@
 import { apiClient } from "@/lib/api"
 import type { Doctor, DoctorDashboard, Appointment, Patient, MedicalRecord } from "@/lib/types/api"
 
+// Queue Management Types
+export interface DoctorStatus {
+  doctorId: string
+  isOnline: boolean
+  isAvailable: boolean
+  status: 'offline' | 'online' | 'available' | 'busy' | 'on-break'
+  breakType?: 'lunch' | 'meeting' | 'emergency' | 'break'
+  breakDuration?: number
+  breakStartTime?: string
+  currentPatients: number
+  maxPatients: number
+  averageConsultationTime: number
+  workingHours: {
+    start: string
+    end: string
+  }
+  specializations: string[]
+  preferredPatientTypes: string[]
+  capacity: {
+    current: number
+    maximum: number
+    percentage: number
+    availabilityStatus: string
+  }
+  isOnBreak: boolean
+  breakTimeRemaining: number
+}
+
+export interface QueuePatient {
+  queueId: string
+  patientId: string
+  patient: {
+    firstName: string
+    lastName: string
+    matricNumber: string
+    age: number
+    department: string
+  }
+  status: 'waiting' | 'assigned' | 'in-consultation' | 'completed' | 'cancelled' | 'no-show'
+  priority: 'emergency' | 'high' | 'medium' | 'low'
+  reason: string
+  symptoms: string[]
+  type: string
+  position: number
+  queuedAt: string
+  assignedAt?: string
+  consultationStartTime?: string
+  consultationEndTime?: string
+  estimatedDuration: number
+  actualDuration?: number
+  waitTime: number
+  consultationTime?: number
+  notes?: string
+  consultationSummary?: any
+}
+
+export interface BreakData {
+  isOnBreak: boolean
+  breakType?: 'lunch' | 'meeting' | 'emergency' | 'break'
+  duration?: number
+  notes?: string
+}
+
+export interface CapacitySettings {
+  maxPatients?: number
+  averageConsultationTime?: number
+  workingHours?: {
+    start?: string
+    end?: string
+  }
+  specializations?: string[]
+  preferredPatientTypes?: string[]
+}
+
+export interface PatientStatusUpdate {
+  status: string
+  notes?: string
+  startTime?: string
+  completedAt?: string
+  consultationSummary?: {
+    diagnosis?: string
+    treatment?: string
+    followUp?: string
+    prescriptions?: any[]
+    notes?: string
+  }
+}
+
 // Doctor Profile Types
 export interface UpdateDoctorProfileData {
   specialization?: string
@@ -619,10 +707,11 @@ class DoctorService {
     // If no doctorId provided, get current user's ID
     if (!doctorId) {
       const currentUser = await this.getCurrentUser()
-      doctorId = currentUser._id || currentUser.id
+      console.log(currentUser, "ddidnj")
+      doctorId = currentUser.doctor._id || currentUser.doctor.id
     }
 
-    const response = await apiClient.get(`/queue/doctors/${doctorId}`)
+    const response = await apiClient.get(`/queue/doctors/${doctorId}/current-patients`)
 
     if (response.success && response.data) {
       return response.data
@@ -733,15 +822,174 @@ class DoctorService {
     throw new Error(response.message || "Failed to add patient")
   }
 
-  // ===== NEW QUEUE MANAGEMENT APIs =====
-  async getQueueStatusDetailed(): Promise<any> {
-    const response = await apiClient.get("/queue/status")
+  // ===== COMPREHENSIVE QUEUE MANAGEMENT APIs =====
+
+  // Get current doctor info
+  async getCurrentDoctor(): Promise<any> {
+    const response = await apiClient.get("/doctor/me")
+
+    if (response.success && response.data) {
+      return response.data.doctor
+    }
+
+    throw new Error(response.message || "Failed to get doctor info")
+  }
+
+  // Doctor Status Management
+  async getDoctorStatus(): Promise<DoctorStatus> {
+    const response = await apiClient.get("/doctor/status")
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get doctor status")
+  }
+
+  async updateDoctorStatus(data: {
+    isOnline?: boolean
+    isAvailable?: boolean
+    status?: string
+    notes?: string
+  }): Promise<DoctorStatus> {
+    const response = await apiClient.put("/doctor/status", data)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to update doctor status")
+  }
+
+  // Break Management
+  async startBreak(data: BreakData): Promise<any> {
+    const response = await apiClient.post("/doctor/break", data)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to start break")
+  }
+
+  async endBreak(): Promise<any> {
+    const response = await apiClient.post("/doctor/break", { isOnBreak: false })
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to end break")
+  }
+
+  async getBreakInfo(): Promise<any> {
+    const response = await apiClient.get("/doctor/break")
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get break information")
+  }
+
+  // Capacity Management
+  async getCapacitySettings(): Promise<any> {
+    const response = await apiClient.get("/doctor/capacity")
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get capacity settings")
+  }
+
+  async updateCapacitySettings(data: CapacitySettings): Promise<any> {
+    const response = await apiClient.put("/doctor/capacity", data)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to update capacity settings")
+  }
+
+  // Current Patients Management
+  async getCurrentPatients(filters?: {
+    status?: string
+    priority?: string
+    includeCompleted?: boolean
+  }): Promise<any> {
+    const response = await apiClient.get("/doctor/current-patients", filters)
+
+    if (response.success && response.data) {
+      return response
+    }
+
+    throw new Error(response.message || "Failed to get current patients")
+  }
+
+  // Patient Status Management
+  async updatePatientStatus(queueId: string, data: PatientStatusUpdate): Promise<any> {
+    const response = await apiClient.put(`/queue/patient/${queueId}/status`, data)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to update patient status")
+  }
+
+  async getPatientStatus(queueId: string): Promise<any> {
+    const response = await apiClient.get(`/queue/patient/${queueId}/status`)
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get patient status")
+  }
+
+  // Queue Status and Assignment
+  async getQueueStatus(filters?: {
+    includeAssigned?: boolean
+    priority?: string
+    status?: string
+  }): Promise<any> {
+    const response = await apiClient.get("/doctor/queue-status", filters)
 
     if (response.success && response.data) {
       return response.data
     }
 
     throw new Error(response.message || "Failed to get queue status")
+  }
+
+  async assignPatientToSelf(queueId: string): Promise<any> {
+    // The API will get doctorId from the JWT token
+    const response = await apiClient.post("/queue/assign-patient", {
+      queueId
+    })
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to assign patient")
+  }
+
+  async getAssignmentData(): Promise<any> {
+    const response = await apiClient.get("/queue/assign-patient")
+
+    if (response.success && response.data) {
+      return response.data
+    }
+
+    throw new Error(response.message || "Failed to get assignment data")
+  }
+
+  // ===== LEGACY QUEUE MANAGEMENT APIs (for backward compatibility) =====
+  async getQueueStatusDetailed(): Promise<any> {
+    return this.getQueueStatus()
   }
 
   async addPatientToQueue(data: {

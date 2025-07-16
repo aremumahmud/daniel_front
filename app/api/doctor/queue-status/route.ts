@@ -35,15 +35,6 @@ mockPatients.set("770g0622-g4bd-63f6-c938-668877662333", {
   department: "Medicine"
 })
 
-mockPatients.set("880h1733-h5ce-74g7-d049-779988774444", {
-  id: "880h1733-h5ce-74g7-d049-779988774444",
-  firstName: "Sarah",
-  lastName: "Williams",
-  matricNumber: "2024/BIO/004",
-  age: 20,
-  department: "Biology"
-})
-
 // Initialize mock doctors
 mockDoctors.set("770g0622-g4bd-63f6-c938-668877662222", {
   id: "770g0622-g4bd-63f6-c938-668877662222",
@@ -51,14 +42,6 @@ mockDoctors.set("770g0622-g4bd-63f6-c938-668877662222", {
   lastName: "Smith",
   specialization: "Cardiology",
   maxPatients: 5
-})
-
-mockDoctors.set("880h1733-h5ce-74g7-d049-779988773333", {
-  id: "880h1733-h5ce-74g7-d049-779988773333",
-  firstName: "Dr. Sarah",
-  lastName: "Johnson",
-  specialization: "Internal Medicine",
-  maxPatients: 6
 })
 
 // Initialize doctor status
@@ -69,15 +52,6 @@ mockDoctorStatus.set("770g0622-g4bd-63f6-c938-668877662222", {
   status: "available",
   currentPatients: 2,
   maxPatients: 5
-})
-
-mockDoctorStatus.set("880h1733-h5ce-74g7-d049-779988773333", {
-  doctorId: "880h1733-h5ce-74g7-d049-779988773333",
-  isOnline: true,
-  isAvailable: true,
-  status: "available",
-  currentPatients: 1,
-  maxPatients: 6
 })
 
 // Initialize comprehensive queue entries
@@ -124,20 +98,6 @@ const queueEntries = [
     assignedAt: null,
     estimatedDuration: 20,
     type: "consultation"
-  },
-  {
-    _id: "queue-004",
-    patientId: "880h1733-h5ce-74g7-d049-779988774444",
-    doctorId: null,
-    position: 4,
-    priority: "emergency",
-    status: "waiting",
-    reason: "Chest pain",
-    symptoms: ["chest pain", "shortness of breath"],
-    queuedAt: new Date(Date.now() - 10 * 60000).toISOString(),
-    assignedAt: null,
-    estimatedDuration: 45,
-    type: "emergency"
   }
 ]
 
@@ -159,10 +119,11 @@ function extractUserFromToken(authHeader: string | null) {
     return null
   }
 }
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
-
+    
     // Authenticate user
     const user = extractUserFromToken(authHeader)
     if (!user || user.role !== 'doctor') {
@@ -197,7 +158,7 @@ export async function GET(request: NextRequest) {
 
     // Exclude assigned patients unless specifically requested
     if (!includeAssigned) {
-      allQueueEntries = allQueueEntries.filter((entry: any) =>
+      allQueueEntries = allQueueEntries.filter((entry: any) => 
         entry.status !== 'assigned' && entry.status !== 'in-consultation'
       )
     }
@@ -208,11 +169,11 @@ export async function GET(request: NextRequest) {
       const priorityOrder = { 'emergency': 0, 'high': 1, 'medium': 2, 'low': 3 }
       const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 4
       const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 4
-
+      
       if (aPriority !== bPriority) {
         return aPriority - bPriority
       }
-
+      
       // Then by queue time (earlier first)
       return new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime()
     })
@@ -261,7 +222,7 @@ export async function GET(request: NextRequest) {
       totalAssigned: allQueueEntries.filter((e: any) => e.status === 'assigned').length,
       totalInConsultation: allQueueEntries.filter((e: any) => e.status === 'in-consultation').length,
       totalCompleted: allQueueEntries.filter((e: any) => e.status === 'completed').length,
-      averageWaitTime: formattedQueue.length > 0 ?
+      averageWaitTime: formattedQueue.length > 0 ? 
         Math.round(formattedQueue.reduce((sum, entry) => sum + entry.waitTime, 0) / formattedQueue.length) : 0,
       priorityDistribution: {
         emergency: allQueueEntries.filter((e: any) => e.priority === 'emergency').length,

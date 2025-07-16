@@ -1,173 +1,293 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 
-// Mock data for demonstration
+// Mock queue and related data (shared with other queue APIs)
 const mockQueue = new Map()
-const mockDoctors = new Map()
 const mockPatients = new Map()
+const mockDoctors = new Map()
+const mockDoctorStatus = new Map()
 
 // Initialize mock data
 mockPatients.set("550e8400-e29b-41d4-a716-446655440000", {
   id: "550e8400-e29b-41d4-a716-446655440000",
   firstName: "John",
-  lastName: "Doe"
+  lastName: "Doe",
+  matricNumber: "2024/CS/001",
+  age: 22,
+  department: "Computer Science"
 })
 
-mockDoctors.set("550e8400-e29b-41d4-a716-446655440003", {
-  id: "550e8400-e29b-41d4-a716-446655440003",
-  name: "Dr. Jane Smith",
-  specialization: "General Medicine",
-  currentPatients: 2,
-  maxPatients: 8,
+mockPatients.set("660f9511-f3ac-52e5-b827-557766551111", {
+  id: "660f9511-f3ac-52e5-b827-557766551111",
+  firstName: "Jane",
+  lastName: "Smith",
+  matricNumber: "2024/ENG/002",
+  age: 21,
+  department: "Engineering"
+})
+
+mockPatients.set("770g0622-g4bd-63f6-c938-668877662333", {
+  id: "770g0622-g4bd-63f6-c938-668877662333",
+  firstName: "Michael",
+  lastName: "Johnson",
+  matricNumber: "2024/MED/003",
+  age: 23,
+  department: "Medicine"
+})
+
+// Initialize mock doctors
+mockDoctors.set("770g0622-g4bd-63f6-c938-668877662222", {
+  id: "770g0622-g4bd-63f6-c938-668877662222",
+  firstName: "Dr. John",
+  lastName: "Smith",
+  specialization: "Cardiology",
+  maxPatients: 5
+})
+
+mockDoctors.set("880h1733-h5ce-74g7-d049-779988773333", {
+  id: "880h1733-h5ce-74g7-d049-779988773333",
+  firstName: "Dr. Sarah",
+  lastName: "Johnson",
+  specialization: "Internal Medicine",
+  maxPatients: 6
+})
+
+// Initialize doctor status
+mockDoctorStatus.set("770g0622-g4bd-63f6-c938-668877662222", {
+  doctorId: "770g0622-g4bd-63f6-c938-668877662222",
   isOnline: true,
   isAvailable: true,
-  averageConsultationTime: 25
+  status: "available",
+  currentPatients: 2,
+  maxPatients: 5
 })
 
-// Initialize a waiting queue entry
-mockQueue.set("550e8400-e29b-41d4-a716-446655440002", {
-  _id: "550e8400-e29b-41d4-a716-446655440002",
-  patientId: "550e8400-e29b-41d4-a716-446655440000",
-  priority: "medium",
-  reason: "Regular checkup",
-  status: "waiting",
-  queuedAt: new Date(Date.now() - 20 * 60000).toISOString(), // 20 minutes ago
-  type: "walk-in"
+mockDoctorStatus.set("880h1733-h5ce-74g7-d049-779988773333", {
+  doctorId: "880h1733-h5ce-74g7-d049-779988773333",
+  isOnline: true,
+  isAvailable: true,
+  status: "available",
+  currentPatients: 1,
+  maxPatients: 6
 })
+
+// Initialize queue entries
+mockQueue.set("queue-003", {
+  _id: "queue-003",
+  patientId: "770g0622-g4bd-63f6-c938-668877662333",
+  doctorId: null,
+  position: 3,
+  priority: "low",
+  status: "waiting",
+  reason: "General consultation",
+  symptoms: ["minor cough"],
+  queuedAt: new Date(Date.now() - 20 * 60000).toISOString(),
+  assignedAt: null,
+  estimatedDuration: 20,
+  type: "consultation"
+})
+
+function extractUserFromToken(authHeader: string | null) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null
+  }
+
+  const token = authHeader.substring(7)
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any
+    return decoded
+  } catch (error) {
+    return null
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Extract JWT token from Authorization header
     const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    // Authenticate user
+    const user = extractUserFromToken(authHeader)
+    if (!user || user.role !== 'doctor') {
       return NextResponse.json(
-        { success: false, message: 'Authorization token required' },
+        {
+          success: false,
+          message: "Unauthorized access",
+          error: "UNAUTHORIZED"
+        },
         { status: 401 }
-      )
-    }
-
-    const token = authHeader.substring(7)
-    let decoded: any
-
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
-    } catch (error) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid or expired token' },
-        { status: 401 }
-      )
-    }
-
-    // Check if user has appropriate role (Admin or Doctor)
-    if (!['admin', 'doctor'].includes(decoded.role)) {
-      return NextResponse.json(
-        { success: false, message: 'Access denied. Admin or Doctor role required.' },
-        { status: 403 }
       )
     }
 
     const body = await request.json()
-    const { queueId, doctorId, notes } = body
+    const { queueId } = body
 
     // Validate required fields
-    if (!queueId || !doctorId) {
+    if (!queueId) {
       return NextResponse.json(
-        { success: false, message: 'Queue ID and Doctor ID are required' },
+        {
+          success: false,
+          message: "Missing required field: queueId",
+          error: "VALIDATION_ERROR"
+        },
         { status: 400 }
       )
     }
 
-    // Check if queue entry exists
+    // Get doctor ID from token
+    const doctorId = user.userId || user.id
+
+    // Get queue entry
     const queueEntry = mockQueue.get(queueId)
     if (!queueEntry) {
       return NextResponse.json(
-        { success: false, message: 'Queue entry not found' },
+        {
+          success: false,
+          message: "Queue entry not found",
+          error: "QUEUE_ENTRY_NOT_FOUND"
+        },
         { status: 404 }
       )
     }
 
-    // Check if queue entry is in waiting status
+    // Check if patient is already assigned
     if (queueEntry.status !== 'waiting') {
       return NextResponse.json(
-        { success: false, message: 'Queue entry is not in waiting status' },
+        {
+          success: false,
+          message: `Patient is already ${queueEntry.status}`,
+          error: "PATIENT_NOT_AVAILABLE"
+        },
         { status: 400 }
       )
     }
 
-    // Check if doctor exists and is available
+    // Get doctor info
     const doctor = mockDoctors.get(doctorId)
     if (!doctor) {
       return NextResponse.json(
-        { success: false, message: 'Doctor not found' },
+        {
+          success: false,
+          message: "Doctor not found",
+          error: "DOCTOR_NOT_FOUND"
+        },
         { status: 404 }
       )
     }
 
-    if (!doctor.isOnline) {
+    // Get doctor status
+    const doctorStatus = mockDoctorStatus.get(doctorId)
+    if (!doctorStatus) {
       return NextResponse.json(
-        { success: false, message: 'Doctor is currently offline' },
+        {
+          success: false,
+          message: "Doctor status not found",
+          error: "DOCTOR_STATUS_NOT_FOUND"
+        },
+        { status: 404 }
+      )
+    }
+
+    // Check if doctor is available
+    if (!doctorStatus.isOnline || !doctorStatus.isAvailable) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Doctor is not available for new patients",
+          error: "DOCTOR_NOT_AVAILABLE"
+        },
         { status: 400 }
       )
     }
 
-    if (!doctor.isAvailable) {
+    // Check doctor capacity
+    if (doctorStatus.currentPatients >= doctorStatus.maxPatients) {
       return NextResponse.json(
-        { success: false, message: 'Doctor is currently unavailable' },
+        {
+          success: false,
+          message: "Doctor is at maximum capacity",
+          error: "DOCTOR_AT_CAPACITY"
+        },
         { status: 400 }
       )
     }
 
-    if (doctor.currentPatients >= doctor.maxPatients) {
-      return NextResponse.json(
-        { success: false, message: 'Doctor is at maximum capacity' },
-        { status: 400 }
-      )
-    }
-
-    // Perform assignment
-    const assignedAt = new Date().toISOString()
-    const estimatedStartTime = new Date(Date.now() + 5 * 60000).toISOString() // 5 minutes from now
+    const now = new Date().toISOString()
 
     // Update queue entry
-    queueEntry.status = 'in_progress'
-    queueEntry.doctorId = doctorId
-    queueEntry.assignedAt = assignedAt
-    queueEntry.estimatedStartTime = estimatedStartTime
-    queueEntry.assignmentNotes = notes || null
-    queueEntry.assignedBy = decoded.userId
-
-    // Update doctor's current load
-    doctor.currentPatients += 1
-    if (doctor.currentPatients >= doctor.maxPatients) {
-      doctor.isAvailable = false
+    const updatedQueueEntry = {
+      ...queueEntry,
+      doctorId,
+      status: 'assigned',
+      assignedAt: now,
+      updatedAt: now,
+      statusHistory: [
+        ...(queueEntry.statusHistory || []),
+        {
+          status: 'assigned',
+          timestamp: now,
+          updatedBy: doctorId,
+          notes: `Assigned to ${doctor.firstName} ${doctor.lastName}`
+        }
+      ]
     }
 
-    // Get patient information for response
+    // Update doctor's current patient count
+    const updatedDoctorStatus = {
+      ...doctorStatus,
+      currentPatients: doctorStatus.currentPatients + 1,
+      lastActivity: now,
+      updatedAt: now
+    }
+
+    // Store updates
+    mockQueue.set(queueId, updatedQueueEntry)
+    mockDoctorStatus.set(doctorId, updatedDoctorStatus)
+
+    // Get patient info for response
     const patient = mockPatients.get(queueEntry.patientId)
 
-    // In a real implementation, emit WebSocket events
-    // io.emit('patient_assigned', {
-    //   queueId: queueEntry._id,
-    //   patientId: queueEntry.patientId,
-    //   doctorId: doctorId,
-    //   assignedAt: assignedAt
-    // })
-    // io.to(`doctor-${doctorId}`).emit('new_patient_assigned', queueEntry)
+    // Calculate wait time
+    const waitTime = Math.floor((Date.now() - new Date(queueEntry.queuedAt).getTime()) / (1000 * 60))
+
+    const responseData = {
+      queueId,
+      patientId: queueEntry.patientId,
+      patient: patient ? {
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        matricNumber: patient.matricNumber,
+        age: patient.age,
+        department: patient.department
+      } : null,
+      doctorId,
+      doctor: {
+        firstName: doctor.firstName,
+        lastName: doctor.lastName,
+        specialization: doctor.specialization
+      },
+      status: 'assigned',
+      priority: queueEntry.priority,
+      reason: queueEntry.reason,
+      symptoms: queueEntry.symptoms || [],
+      type: queueEntry.type,
+      position: queueEntry.position,
+      queuedAt: queueEntry.queuedAt,
+      assignedAt: now,
+      estimatedDuration: queueEntry.estimatedDuration,
+      waitTime,
+      waitTimeDisplay: `${waitTime} min`,
+      doctorCapacity: {
+        current: updatedDoctorStatus.currentPatients,
+        maximum: updatedDoctorStatus.maxPatients,
+        remaining: updatedDoctorStatus.maxPatients - updatedDoctorStatus.currentPatients,
+        percentage: (updatedDoctorStatus.currentPatients / updatedDoctorStatus.maxPatients) * 100
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Patient assigned successfully",
-      data: {
-        _id: queueEntry._id,
-        patientId: queueEntry.patientId,
-        patientName: patient ? `${patient.firstName} ${patient.lastName}` : "Unknown Patient",
-        doctorId: doctorId,
-        doctorName: doctor.name,
-        status: queueEntry.status,
-        assignedAt: assignedAt,
-        estimatedStartTime: estimatedStartTime,
-        notes: notes || null
-      }
+      message: `Patient successfully assigned to ${doctor.firstName} ${doctor.lastName}`,
+      data: responseData
     })
 
   } catch (error) {
@@ -175,7 +295,114 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to assign patient. Please try again.",
+        message: "Failed to assign patient",
+        error: error instanceof Error ? error.message : "Unknown error"
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('authorization')
+
+    // Authenticate user
+    const user = extractUserFromToken(authHeader)
+    if (!user || user.role !== 'doctor') {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized access",
+          error: "UNAUTHORIZED"
+        },
+        { status: 401 }
+      )
+    }
+
+    // Get available patients for assignment
+    const availablePatients = Array.from(mockQueue.values())
+      .filter((entry: any) => entry.status === 'waiting')
+      .sort((a: any, b: any) => {
+        // Sort by priority first, then by queue time
+        const priorityOrder = { 'emergency': 0, 'high': 1, 'medium': 2, 'low': 3 }
+        const aPriority = priorityOrder[a.priority as keyof typeof priorityOrder] || 4
+        const bPriority = priorityOrder[b.priority as keyof typeof priorityOrder] || 4
+
+        if (aPriority !== bPriority) {
+          return aPriority - bPriority
+        }
+
+        return new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime()
+      })
+      .map((entry: any) => {
+        const patient = mockPatients.get(entry.patientId)
+        const waitTime = Math.floor((Date.now() - new Date(entry.queuedAt).getTime()) / (1000 * 60))
+
+        return {
+          queueId: entry._id,
+          patientId: entry.patientId,
+          patient: patient ? {
+            firstName: patient.firstName,
+            lastName: patient.lastName,
+            matricNumber: patient.matricNumber,
+            age: patient.age,
+            department: patient.department
+          } : null,
+          priority: entry.priority,
+          reason: entry.reason,
+          symptoms: entry.symptoms || [],
+          type: entry.type,
+          position: entry.position,
+          queuedAt: entry.queuedAt,
+          estimatedDuration: entry.estimatedDuration,
+          waitTime,
+          waitTimeDisplay: `${waitTime} min`
+        }
+      })
+
+    // Get available doctors
+    const availableDoctors = Array.from(mockDoctorStatus.values())
+      .filter((status: any) => status.isOnline && status.isAvailable && status.currentPatients < status.maxPatients)
+      .map((status: any) => {
+        const doctor = mockDoctors.get(status.doctorId)
+        return {
+          doctorId: status.doctorId,
+          doctor: doctor ? {
+            firstName: doctor.firstName,
+            lastName: doctor.lastName,
+            specialization: doctor.specialization
+          } : null,
+          currentPatients: status.currentPatients,
+          maxPatients: status.maxPatients,
+          availableSlots: status.maxPatients - status.currentPatients,
+          utilizationPercentage: (status.currentPatients / status.maxPatients) * 100
+        }
+      })
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        availablePatients,
+        availableDoctors,
+        assignmentGuidelines: {
+          priorityOrder: ['emergency', 'high', 'medium', 'low'],
+          assignmentRules: [
+            "Emergency patients should be assigned immediately",
+            "Assign patients based on priority and wait time",
+            "Consider doctor specialization for specific cases",
+            "Respect doctor capacity limits"
+          ]
+        }
+      }
+    })
+
+  } catch (error) {
+    console.error('Error getting assignment data:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Failed to get assignment data",
         error: error instanceof Error ? error.message : "Unknown error"
       },
       { status: 500 }
