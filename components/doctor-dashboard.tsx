@@ -550,19 +550,38 @@ function DoctorPatients() {
 
   const handleViewPatient = async (patient: Patient) => {
     try {
+      console.log("Loading patient details for:", patient._id)
       const response = await doctorService.getPatientDetails(patient._id)
-      // Handle the API response structure: { success: true, data: { patient: {...}, medicalRecords: [...], appointments: [...] } }
-      if (response.success && response.data && response.data.patient) {
-        setSelectedPatient(response.data.patient)
+      console.log("Patient details response:", response)
+
+      // Handle different response structures
+      if (response.success && response.data) {
+        // If response has nested patient data
+        if (response.data.patient) {
+          setSelectedPatient(response.data.patient)
+        } else {
+          // If response.data is the patient directly
+          setSelectedPatient(response.data)
+        }
+      } else if (response.patient) {
+        // If response has patient directly
+        setSelectedPatient(response.patient)
+      } else if (response._id || response.id) {
+        // If response is the patient object directly
+        setSelectedPatient(response)
       } else {
-        // Fallback to direct patient data if structure is different
-        setSelectedPatient(response.patient || response)
+        // Fallback to the original patient data if API fails
+        console.warn("API response structure unexpected, using original patient data")
+        setSelectedPatient(patient)
       }
     } catch (error) {
+      console.error("Error loading patient details:", error)
+      // Fallback to showing the basic patient data we already have
+      setSelectedPatient(patient)
       toast({
-        title: "Error",
-        description: "Failed to load patient details",
-        variant: "destructive",
+        title: "Warning",
+        description: "Could not load full patient details, showing basic information",
+        variant: "default",
       })
     }
   }
@@ -824,7 +843,7 @@ function DoctorPatients() {
           <DialogHeader>
             <DialogTitle>Patient Details</DialogTitle>
             <DialogDescription>
-              Complete information for {selectedPatient?.userId?.fullName || `${selectedPatient?.firstName} ${selectedPatient?.lastName}`}
+              Complete information for {selectedPatient?.userId?.fullName || "Patient"}
             </DialogDescription>
           </DialogHeader>
           {selectedPatient && (
@@ -834,15 +853,15 @@ function DoctorPatients() {
                 <CardContent className="p-6">
                   <div className="flex items-start space-x-4">
                     <Avatar className="h-20 w-20">
-                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarImage src={selectedPatient.userId?.avatarUrl || "/placeholder.svg"} />
                       <AvatarFallback className="text-xl">
-                        {selectedPatient.firstName?.[0]}
-                        {selectedPatient.lastName?.[0]}
+                        {selectedPatient.userId?.fullName?.[0] || selectedPatient.userId?.firstName?.[0] || "P"}
+                        {selectedPatient.userId?.lastName?.[0] || ""}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <h2 className="text-2xl font-bold">
-                        {selectedPatient.userId?.fullName || `${selectedPatient.firstName} ${selectedPatient.middleName ? selectedPatient.middleName + ' ' : ''}${selectedPatient.lastName}`}
+                        {selectedPatient.userId?.fullName || "Patient Name"}
                       </h2>
                       <p className="text-muted-foreground">
                         {selectedPatient.age || 'Age not calculated'} years old • {selectedPatient.gender} • {selectedPatient.bloodType}
@@ -850,11 +869,11 @@ function DoctorPatients() {
                       <div className="flex items-center gap-4 mt-2">
                         <div className="flex items-center gap-1">
                           <Phone className="h-4 w-4" />
-                          <span className="text-sm">{selectedPatient.phoneNumber}</span>
+                          <span className="text-sm">{selectedPatient.userId?.phone || "Not provided"}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Mail className="h-4 w-4" />
-                          <span className="text-sm">{selectedPatient.emailAddress}</span>
+                          <span className="text-sm">{selectedPatient.userId?.email || "Not provided"}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-3">
