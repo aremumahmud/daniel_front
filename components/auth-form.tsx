@@ -42,14 +42,14 @@ export function AuthForm({ userType }: AuthFormProps) {
 
       console.log("Logged in user:", loggedInUser)
 
-      // Redirect based on user role from API response
-      if (loggedInUser.role === "admin") {
-        router.push("/dashboard")
-      } else if (loggedInUser.role === "doctor") {
-        router.push("/doctor/dashboard")
-      } else {
-        router.push("/patient/dashboard")
+      // Redirect based on the Cognito group the user belongs to.
+      const roleRedirects: Record<string, string> = {
+        receptionist: "/reception",
+        doctor: "/doctor/dashboard",
+        pharmacist: "/pharmacy",
+        student: "/student/dashboard",
       }
+      router.push(roleRedirects[loggedInUser.role] ?? "/auth")
     } catch (error) {
       // Error is already handled in the useAuth hook
       console.error("Login error:", error)
