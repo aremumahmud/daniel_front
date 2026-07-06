@@ -1,4 +1,10 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
+import "@/lib/amplify"
+import { fetchAuthSession, signOut } from "aws-amplify/auth"
+
+// Calls go through the Next.js app/api/* proxy routes, which attach the
+// Cognito bearer token server-side and forward to API Gateway. See
+// AWS_INFRA_SETUP.md and MIGRATION_NOTES.md for the endpoint mapping.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api"
 
 // Global auth handler - will be set by the auth context
 let globalAuthHandler: (() => void) | null = null
@@ -25,28 +31,28 @@ interface ApiError extends ApiResponse {
   errors?: ValidationError[]
 }
 
-// Auth token management
+/**
+ * Replaces the old localStorage-based TokenManager. Amplify owns token
+ * storage/refresh internally (via the Cognito refresh token flow) — this
+ * is just a thin accessor so the rest of the app doesn't need to import
+ * aws-amplify directly everywhere.
+ */
 class TokenManager {
-  private static readonly TOKEN_KEY = "healthcare_token"
-
-  static getToken(): string | null {
-    if (typeof window === "undefined") return null
-    const token = localStorage.getItem(this.TOKEN_KEY)
-    console.log("TokenManager.getToken() called, token exists:", !!token)
-    return token
+  static async getToken(): Promise<string | null> {
+    try {
+      const session = await fetchAuthSession()
+      return session.tokens?.idToken?.toString() ?? null
+    } catch {
+      return null
+    }
   }
 
-  static setToken(token: string): void {
-    if (typeof window === "undefined") return
-    console.log("TokenManager.setToken() called, storing token")
-    localStorage.setItem(this.TOKEN_KEY, token)
-  }
-
-  static removeToken(): void {
-    if (typeof window === "undefined") return
-    console.warn("TokenManager.removeToken() called - REMOVING TOKEN FROM LOCALSTORAGE")
-    console.trace("Token removal stack trace:")
-    localStorage.removeItem(this.TOKEN_KEY)
+  static async removeToken(): Promise<void> {
+    try {
+      await signOut()
+    } catch {
+      // already signed out / no session — nothing to do
+    }
   }
 }
 
@@ -60,9 +66,7 @@ class ApiClient {
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`
-    const token = TokenManager.getToken()
-
-    console.log(`API Request: ${options.method || 'GET'} ${url}`)
+    const token = await TokenManager.getToken()
 
     const config: RequestInit = {
       headers: {
@@ -78,31 +82,14 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        // Only clear tokens for actual authentication errors, not 404s or other errors
-        if (response.status === 401 &&
-            (data.success === false &&
-             (data.message === "Not authorized, no token" ||
-              data.message === "Unauthorized access" ||
-              data.error === "UNAUTHORIZED" ||
-              data.message?.toLowerCase().includes("unauthorized") ||
-              data.message?.toLowerCase().includes("token") ||
-              data.message?.toLowerCase().includes("expired")))) {
-
-          console.warn("Authentication failed, clearing token and redirecting to login")
-
-          // Clear the invalid token
-          TokenManager.removeToken()
-
-          // Call the global auth handler to handle logout and redirect
-          if (globalAuthHandler) {
-            globalAuthHandler()
-          }
-
-          // Throw a specific auth error
-          throw new Error("UNAUTHORIZED")
+        // 401 = Cognito session invalid/expired, 403 = wrong Cognito group
+        // for this route. Both mean the current session can't proceed.
+        if (response.status === 401 || response.status === 403) {
+          await TokenManager.removeToken()
+          if (globalAuthHandler) globalAuthHandler()
+          throw new Error(response.status === 403 ? "FORBIDDEN" : "UNAUTHORIZED")
         }
 
-        // For 404 errors, don't clear tokens - just throw the error
         if (response.status === 404) {
           throw new Error(`Endpoint not found: ${url}`)
         }
@@ -121,15 +108,13 @@ class ApiClient {
     let url = endpoint
 
     if (params) {
-      // Filter out undefined, null, and empty string values
       const filteredParams: Record<string, string> = {}
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
+        if (value !== undefined && value !== null && value !== "") {
           filteredParams[key] = String(value)
         }
       })
 
-      // Only add query string if we have valid parameters
       if (Object.keys(filteredParams).length > 0) {
         url = `${endpoint}?${new URLSearchParams(filteredParams)}`
       }
@@ -157,7 +142,7 @@ class ApiClient {
   }
 
   async upload<T>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
-    const token = TokenManager.getToken()
+    const token = await TokenManager.getToken()
     const url = `${this.baseURL}${endpoint}`
 
     try {
@@ -172,25 +157,10 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        // Check for unauthorized response
-        if (response.status === 401 ||
-            (data.success === false && data.message === "Not authorized, no token") ||
-            (data.success === false && data.message?.toLowerCase().includes("unauthorized")) ||
-            (data.success === false && data.message?.toLowerCase().includes("token")) ||
-            (data.success === false && data.message?.toLowerCase().includes("expired"))) {
-
-          console.warn("Authentication failed during upload, clearing token and redirecting to login")
-
-          // Clear the invalid token
-          TokenManager.removeToken()
-
-          // Call the global auth handler to handle logout and redirect
-          if (globalAuthHandler) {
-            globalAuthHandler()
-          }
-
-          // Throw a specific auth error
-          throw new Error("UNAUTHORIZED")
+        if (response.status === 401 || response.status === 403) {
+          await TokenManager.removeToken()
+          if (globalAuthHandler) globalAuthHandler()
+          throw new Error(response.status === 403 ? "FORBIDDEN" : "UNAUTHORIZED")
         }
 
         throw new Error(data.message || "Upload failed")

@@ -6,6 +6,11 @@ export interface ApiResponse<T = any> {
   error?: string
 }
 
+// Cognito Group name, lowercased for internal role checks (route guards,
+// UI branching). Cognito Groups are named exactly Receptionist/Doctor/
+// Pharmacist/Student — see AWS_INFRA_SETUP.md.
+export type UserRole = "receptionist" | "doctor" | "pharmacist" | "student"
+
 export interface LoginResponse {
   success: boolean
   message: string
@@ -15,18 +20,22 @@ export interface LoginResponse {
     email: string
     firstName: string
     lastName: string
-    role: "admin" | "doctor" | "patient"
+    role: UserRole
     emailVerified: boolean
     avatarUrl: string | null
   }
 }
 
 // User Types
+// Derived from the Cognito ID token: sub -> _id, cognito:groups[0] -> role,
+// custom:matricNumber -> matricNumber (Student users only). See
+// hooks/use-auth.tsx for the claim-decoding logic.
 export interface User {
   _id: string
   id?: string // API sometimes returns id instead of _id
   email: string
-  role: "admin" | "doctor" | "patient"
+  role: UserRole
+  matricNumber?: string
   firstName: string
   lastName: string
   phone?: string

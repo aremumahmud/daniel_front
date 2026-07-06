@@ -1,9 +1,10 @@
 "use client"
 
+import "@/lib/amplify"
 import { useState, useEffect, createContext, useContext, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { authService } from "@/services/auth.service"
-import type { User } from "@/lib/types/api"
+import { signIn, signOut, fetchAuthSession } from "aws-amplify/auth"
+import type { User, UserRole } from "@/lib/types/api"
 import { toast } from "@/hooks/use-toast"
 import { setGlobalAuthHandler } from "@/lib/api"
 
@@ -11,23 +12,67 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<User>
-  register: (userData: any) => Promise<User>
   logout: () => Promise<void>
-  updateProfile: (data: any) => Promise<void>
   isAuthenticated: boolean
+  // Self-service registration/profile editing is out of scope for this
+  // build — accounts are provisioned by an admin directly in Cognito (see
+  // AWS_INFRA_SETUP.md). Kept as stubs so the old admin-signup/doctor-signup
+  // /settings pages that still call these don't crash the whole app; those
+  // pages themselves need to be removed or reworked (see MIGRATION_NOTES.md).
+  register: (userData: any) => Promise<User>
+  updateProfile: (data: any) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+/**
+ * Builds our internal User shape from a Cognito ID token's claims.
+ * Cognito Groups (Receptionist/Doctor/Pharmacist/Student) become the
+ * lowercased `role`; Student accounts additionally carry
+ * `custom:matricNumber` so the app can scope their own data.
+ */
+function userFromIdTokenClaims(claims: Record<string, any>): User | null {
+  const groups: string[] = Array.isArray(claims["cognito:groups"])
+    ? claims["cognito:groups"]
+    : typeof claims["cognito:groups"] === "string"
+      ? claims["cognito:groups"].replace(/[[\]]/g, "").split(",").map((g: string) => g.trim()).filter(Boolean)
+      : []
+
+  const role = groups[0]?.toLowerCase() as UserRole | undefined
+  if (!role) return null
+
+  const firstName = claims.given_name || claims.email?.split("@")[0] || "User"
+  const lastName = claims.family_name || ""
+
+  return {
+    _id: claims.sub,
+    email: claims.email,
+    role,
+    matricNumber: claims["custom:matricNumber"],
+    firstName,
+    lastName,
+    isActive: true,
+    emailVerified: claims.email_verified === true || claims.email_verified === "true",
+    fullName: `${firstName} ${lastName}`.trim(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }
+}
+
+async function getCurrentUserFromSession(): Promise<User | null> {
+  const session = await fetchAuthSession()
+  const idToken = session.tokens?.idToken
+  if (!idToken) return null
+  return userFromIdTokenClaims(idToken.payload as Record<string, any>)
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  // Set up global auth handler for API client
   useEffect(() => {
     const handleUnauthorized = () => {
-      console.log("Global auth handler triggered - user unauthorized")
       setUser(null)
       toast({
         title: "Session Expired",
@@ -43,73 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // First check if we have a token at all
-        const hasToken = authService.isAuthenticated()
-        console.log("Auth initialization - has valid token:", hasToken)
-
-        if (hasToken) {
-          console.log("Token found, attempting to get current user...")
-          try {
-            const userData = await authService.getCurrentUser()
-            console.log("Current user loaded successfully:", userData)
-            console.log("User role from API:", userData.role)
-            setUser(userData)
-          } catch (userError) {
-            console.error("Failed to get current user:", userError)
-
-            // Only clear session if it's definitely an auth error
-            if (userError instanceof Error &&
-                (userError.message === "UNAUTHORIZED" ||
-                 userError.message === "Authentication token is invalid" ||
-                 userError.message.includes("Not authorized"))) {
-              console.log("Authentication failed, clearing session")
-              await authService.logout()
-            } else {
-              // For other errors (like network issues), try to get user from token
-              console.log("Non-auth error getting user data, trying token fallback")
-              try {
-                // Try to decode user from token as fallback
-                const token = localStorage.getItem("healthcare_token")
-                if (token) {
-                  const payload = JSON.parse(atob(token.split('.')[1]))
-                  console.log("Token payload for fallback:", payload)
-
-                  // Don't create fallback user if we can't determine the role
-                  if (!payload.role) {
-                    console.error("No role found in token payload, cannot create fallback user")
-                    console.log("Available payload fields:", Object.keys(payload))
-                    return
-                  }
-
-                  const fallbackUser = {
-                    _id: payload.id || payload.userId || payload.sub || "unknown",
-                    email: payload.email || "unknown@example.com",
-                    firstName: payload.firstName || payload.first_name || "Unknown",
-                    lastName: payload.lastName || payload.last_name || "User",
-                    role: payload.role, // Use actual role from token
-                    emailVerified: payload.emailVerified || false,
-                    avatarUrl: payload.avatarUrl,
-                    isActive: true,
-                    fullName: `${payload.firstName || "Unknown"} ${payload.lastName || "User"}`,
-                    createdAt: new Date((payload.iat || Date.now() / 1000) * 1000),
-                    updatedAt: new Date(),
-                  }
-                  console.log("Using fallback user from token:", fallbackUser)
-                  console.log("Fallback user role:", fallbackUser.role)
-                  console.log("Setting user in auth context...")
-                  setUser(fallbackUser)
-                }
-              } catch (tokenError) {
-                console.error("Failed to decode user from token:", tokenError)
-              }
-            }
-          }
-        } else {
-          console.log("No valid token found, user not authenticated")
-        }
+        const currentUser = await getCurrentUserFromSession()
+        setUser(currentUser)
       } catch (error) {
-        console.error("Auth initialization error:", error)
-        // Don't clear session for general initialization errors
+        // No active Cognito session — user is simply logged out.
+        setUser(null)
       } finally {
         setLoading(false)
       }
@@ -121,23 +104,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<User> => {
     try {
       setLoading(true)
-      const response = await authService.login({ email, password })
+      const { isSignedIn } = await signIn({ username: email, password })
 
-      console.log("Login successful:", response)
+      if (!isSignedIn) {
+        throw new Error("Additional sign-in step required (e.g. MFA or new password) — not supported yet")
+      }
 
-      // Convert login response user to internal User type
-      const userData: User = {
-        _id: response.user.id,
-        email: response.user.email,
-        firstName: response.user.firstName,
-        lastName: response.user.lastName,
-        role: response.user.role,
-        emailVerified: response.user.emailVerified,
-        avatarUrl: response.user.avatarUrl || undefined,
-        isActive: true, // Assume active if login successful
-        fullName: `${response.user.firstName} ${response.user.lastName}`,
-        createdAt: new Date(), // Placeholder
-        updatedAt: new Date(), // Placeholder
+      const userData = await getCurrentUserFromSession()
+      if (!userData) {
+        throw new Error("Signed in, but no Cognito group is assigned to this account")
       }
 
       setUser(userData)
@@ -146,10 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: `Welcome back, ${userData.firstName}!`,
       })
 
-      // Return the user data so the caller can use it immediately
       return userData
     } catch (error) {
-      console.error("Login failed:", error)
       toast({
         title: "Login Failed",
         description: error instanceof Error ? error.message : "Invalid credentials",
@@ -161,49 +134,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const register = async (userData: any): Promise<User> => {
-    try {
-      setLoading(true)
-      const response = await authService.register(userData)
-
-      // Convert registration response user to internal User type
-      const newUser: User = {
-        _id: response.user.id,
-        email: response.user.email,
-        firstName: response.user.firstName,
-        lastName: response.user.lastName,
-        role: response.user.role,
-        emailVerified: response.user.emailVerified,
-        avatarUrl: response.user.avatarUrl || undefined,
-        isActive: true, // Assume active if registration successful
-        fullName: `${response.user.firstName} ${response.user.lastName}`,
-        createdAt: new Date(), // Placeholder
-        updatedAt: new Date(), // Placeholder
-      }
-
-      setUser(newUser)
-      toast({
-        title: "Registration Successful",
-        description: `Welcome to HealthAuth, ${newUser.firstName}!`,
-      })
-
-      // Return the user data so the caller can use it immediately
-      return newUser
-    } catch (error) {
-      toast({
-        title: "Registration Failed",
-        description: error instanceof Error ? error.message : "Registration failed",
-        variant: "destructive",
-      })
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const logout = async () => {
     try {
-      await authService.logout()
+      await signOut()
       setUser(null)
       toast({
         title: "Logged Out",
@@ -214,39 +147,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const updateProfile = async (data: any) => {
-    try {
-      const updatedUser = await authService.updateProfile(data)
-      setUser(updatedUser)
-      toast({
-        title: "Profile Updated",
-        description: "Your profile has been successfully updated.",
-      })
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: error instanceof Error ? error.message : "Failed to update profile",
-        variant: "destructive",
-      })
-      throw error
-    }
+  const register = async (): Promise<User> => {
+    throw new Error("Self-service registration is disabled — ask an admin to create your account in Cognito")
+  }
+
+  const updateProfile = async (): Promise<void> => {
+    throw new Error("Profile editing isn't supported yet in this build")
   }
 
   const value: AuthContextType = {
     user,
     loading,
     login,
-    register,
     logout,
-    updateProfile,
     isAuthenticated: !!user,
+    register,
+    updateProfile,
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

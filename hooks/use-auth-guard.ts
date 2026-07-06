@@ -8,7 +8,7 @@ import { toast } from "@/hooks/use-toast"
 interface AuthGuardOptions {
   redirectTo?: string
   showToast?: boolean
-  requiredRole?: "admin" | "doctor" | "patient"
+  requiredRole?: "receptionist" | "doctor" | "pharmacist" | "student"
 }
 
 export function useAuthGuard(options: AuthGuardOptions = {}) {
@@ -50,11 +50,12 @@ export function useAuthGuard(options: AuthGuardOptions = {}) {
       
       // Redirect based on user's actual role
       const roleRedirects = {
-        admin: "/dashboard",
-        doctor: "/doctor/dashboard", 
-        patient: "/patient/dashboard"
+        receptionist: "/reception",
+        doctor: "/doctor/dashboard",
+        pharmacist: "/pharmacy",
+        student: "/student/dashboard"
       }
-      
+
       router.push(roleRedirects[user.role] || "/")
       return
     }
