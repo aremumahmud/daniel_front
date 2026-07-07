@@ -51,7 +51,7 @@ export function useAuthGuard(options: AuthGuardOptions = {}) {
       // Redirect based on user's actual role
       const roleRedirects = {
         receptionist: "/reception",
-        doctor: "/doctor/dashboard",
+        doctor: "/doctor/queue",
         pharmacist: "/pharmacy",
         student: "/student/dashboard"
       }

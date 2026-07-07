@@ -14,9 +14,8 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "Dealth - Health Record System",
-  description: "Secure health record management system",
-  generator: "v0.dev",
+  title: "UniIlorin Clinic — Health Records",
+  description: "Healthcare data management system for the University of Ilorin clinic",
 }
 
 export default function RootLayout({

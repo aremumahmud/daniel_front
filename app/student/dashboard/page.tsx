@@ -1,122 +1,216 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table"
+import { CalendarDays, FileText, HeartPulse, Pill } from "lucide-react"
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
+import { AppShell } from "@/components/shell/app-shell"
+import { EmptyState } from "@/components/shell/empty-state"
+import { PageHeader } from "@/components/shell/page-header"
+import { StatCard } from "@/components/shell/stat-card"
+import { StatusBadge } from "@/components/shell/status-badge"
+import { TableSkeleton } from "@/components/shell/table-skeleton"
+
 import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
 import { getStudentProfile } from "@/services/clinic.service"
 
-// Student Portal — FR-18 (secure, self-only view of demographic + clinical
-// data). Renamed from app/patient/dashboard. Calls a single aggregated
-// endpoint (GET /students/me) which the Lambda scopes strictly to the
-// caller's own custom:matricNumber Cognito attribute — a student can never
-// pass in someone else's matric number, unlike the old generic
-// /patients/{matricNumber} route.
 export default function StudentDashboardPage() {
   const { isLoading } = useAuthGuard({ requiredRole: "student" })
-  const { data: profile, loading } = usePolling(getStudentProfile, 30000)
+  const { data: profile, loading, error } = usePolling(getStudentProfile, 30000)
 
-  if (isLoading || loading) return null
+  if (isLoading) return null
 
-  if (!profile) {
-    return <div className="max-w-3xl mx-auto p-6">No record found for your account.</div>
-  }
+  const encounters = (profile?.encounters ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const prescriptions = (profile?.prescriptions ?? [])
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const appointments = (profile?.appointments ?? [])
+    .slice()
+    .sort((a, b) => (b.appointmentDate ?? "").localeCompare(a.appointmentDate ?? ""))
+  const pendingRx = prescriptions.filter((p) => p.status === "PENDING").length
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 p-6">
-      <h1 className="text-3xl font-bold">My Health Record</h1>
+    <AppShell title="My Health Record">
+      <div className="space-y-8">
+        <PageHeader
+          title="My Health Record"
+          description="Your visits, prescriptions and appointments at the university clinic."
+        />
 
-      <Card>
-        <CardHeader><CardTitle>Profile</CardTitle></CardHeader>
-        <CardContent className="space-y-1">
-          <div><strong>Name:</strong> {profile.patient.name}</div>
-          <div><strong>Matric No.:</strong> {profile.patient.matricNumber}</div>
-          <div><strong>Department:</strong> {profile.patient.department}</div>
-          <div><strong>Email:</strong> {profile.patient.email}</div>
-        </CardContent>
-      </Card>
+        {error && !profile ? (
+          <Card className="rounded-lg shadow-sm">
+            <CardContent>
+              <EmptyState
+                icon={HeartPulse}
+                title="We couldn't load your record"
+                description="Please refresh the page, or contact the clinic front desk if this keeps happening."
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Profile summary */}
+            <Card className="rounded-lg shadow-sm">
+              <CardContent className="pt-6">
+                {loading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-56" />
+                    <Skeleton className="h-4 w-72" />
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-lg font-semibold tracking-tight">{profile?.patient.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {profile?.patient.matricNumber} &middot; {profile?.patient.department} &middot;{" "}
+                        {profile?.patient.email}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Registered{" "}
+                      {profile?.patient.createdAt && new Date(profile.patient.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Consultation History</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Doctor</TableCell>
-                <TableCell>Diagnosis</TableCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {profile.encounters.map((e) => (
-                <TableRow key={e.encounterId}>
-                  <TableCell>{new Date(e.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell>{e.doctorName}</TableCell>
-                  <TableCell>{e.diagnosis}</TableCell>
-                </TableRow>
-              ))}
-              {profile.encounters.length === 0 && (
-                <TableRow><TableCell colSpan={3}>No consultations yet.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatCard label="Consultations" value={encounters.length} icon={FileText} loading={loading} />
+              <StatCard
+                label="Prescriptions"
+                value={prescriptions.length}
+                hint={pendingRx > 0 ? `${pendingRx} ready for pickup` : undefined}
+                icon={Pill}
+                loading={loading}
+              />
+              <StatCard label="Appointments" value={appointments.length} icon={CalendarDays} loading={loading} />
+            </div>
 
-      <Card>
-        <CardHeader><CardTitle>Prescriptions</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableCell>Medication</TableCell>
-                <TableCell>Dosage</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {profile.prescriptions.map((p) => (
-                <TableRow key={p.prescriptionId}>
-                  <TableCell>{p.medication}</TableCell>
-                  <TableCell>{p.dosage} · {p.frequency}</TableCell>
-                  <TableCell><Badge>{p.status}</Badge></TableCell>
-                </TableRow>
-              ))}
-              {profile.prescriptions.length === 0 && (
-                <TableRow><TableCell colSpan={3}>No prescriptions yet.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Consultations */}
+              <Card className="rounded-lg shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Consultation history</CardTitle>
+                  <CardDescription>Diagnoses recorded by clinic doctors.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <TableSkeleton rows={3} cols={2} />
+                  ) : encounters.length === 0 ? (
+                    <EmptyState icon={FileText} title="No consultations yet" />
+                  ) : (
+                    <div className="space-y-3">
+                      {encounters.map((e) => (
+                        <div key={e.encounterId} className="rounded-lg border p-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium">{e.diagnosis}</p>
+                            <p className="shrink-0 text-xs text-muted-foreground">
+                              {new Date(e.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {e.notes && <p className="mt-1 text-sm text-muted-foreground">{e.notes}</p>}
+                          <p className="mt-2 text-xs text-muted-foreground">{e.doctorName}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Appointments</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Reason</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {profile.appointments.map((a) => (
-                <TableRow key={a.appointmentId}>
-                  <TableCell>{new Date(a.appointmentDate).toLocaleString()}</TableCell>
-                  <TableCell>{a.reason}</TableCell>
-                  <TableCell><Badge variant="outline">{a.status}</Badge></TableCell>
-                </TableRow>
-              ))}
-              {profile.appointments.length === 0 && (
-                <TableRow><TableCell colSpan={3}>No appointments scheduled.</TableCell></TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+              {/* Prescriptions */}
+              <Card className="rounded-lg shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-base">Prescriptions</CardTitle>
+                  <CardDescription>Show your matriculation number at the pharmacy to collect.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <TableSkeleton rows={3} cols={3} />
+                  ) : prescriptions.length === 0 ? (
+                    <EmptyState icon={Pill} title="No prescriptions yet" />
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Medication</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="hidden sm:table-cell">Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {prescriptions.map((p) => (
+                          <TableRow key={p.prescriptionId}>
+                            <TableCell>
+                              <p className="font-medium">{p.medication}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {p.dosage} &middot; {p.frequency}
+                              </p>
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={p.status} />
+                            </TableCell>
+                            <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                              {new Date(p.createdAt).toLocaleDateString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Appointments */}
+            <Card className="rounded-lg shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Appointments</CardTitle>
+                <CardDescription>Scheduled by the clinic front desk.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <TableSkeleton rows={2} cols={3} />
+                ) : appointments.length === 0 ? (
+                  <EmptyState
+                    icon={CalendarDays}
+                    title="No appointments scheduled"
+                    description="Contact the front desk to book one."
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="hidden sm:table-cell">Reason</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {appointments.map((a) => (
+                        <TableRow key={a.appointmentId}>
+                          <TableCell className="text-sm">
+                            {new Date(a.appointmentDate).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                            {a.reason || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={a.status} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </AppShell>
   )
 }
