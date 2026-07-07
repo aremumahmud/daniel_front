@@ -104,7 +104,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<User> => {
     try {
       setLoading(true)
-      const { isSignedIn } = await signIn({ username: email, password })
+
+      let signInResult
+      try {
+        signInResult = await signIn({ username: email, password })
+      } catch (error) {
+        // A stale/abandoned session (e.g. switching accounts without signing
+        // out) makes Amplify refuse to start a new one. Clear it and retry
+        // once instead of surfacing "There is already a signed in user".
+        if (error instanceof Error && error.name === "UserAlreadyAuthenticatedException") {
+          await signOut()
+          signInResult = await signIn({ username: email, password })
+        } else {
+          throw error
+        }
+      }
+      const { isSignedIn } = signInResult
 
       if (!isSignedIn) {
         throw new Error("Additional sign-in step required (e.g. MFA or new password) — not supported yet")
