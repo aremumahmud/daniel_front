@@ -38,8 +38,12 @@ export function useAuthGuard(options: AuthGuardOptions = {}) {
       return
     }
 
+    // Staff (any clinical role) may also view the patient health-record
+    // portal, since they use the clinic as patients too.
+    const staffViewingOwnRecord = requiredRole === "student" && user.isStaff
+
     // Check role-based access if required
-    if (requiredRole && user.role !== requiredRole) {
+    if (requiredRole && user.role !== requiredRole && !staffViewingOwnRecord) {
       if (showToast) {
         toast({
           title: "Access Denied",

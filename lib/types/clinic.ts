@@ -9,6 +9,19 @@ export interface Patient {
   email: string
   department: string
   createdAt: string
+  // Optional demographic profile (added later; older records may omit these).
+  dateOfBirth?: string
+  sex?: string
+  bloodGroup?: string
+  genotype?: string
+  height?: number
+  weight?: number
+  allergies?: string
+  chronicConditions?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  stateOfOrigin?: string
+  nationality?: string
 }
 
 export interface Encounter {

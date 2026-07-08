@@ -35,6 +35,10 @@ export interface User {
   id?: string // API sometimes returns id instead of _id
   email: string
   role: UserRole
+  // True when the user is also in the Cognito "Staff" group — staff use the
+  // clinic as patients, so they can view their own health record in addition
+  // to their clinical portal.
+  isStaff?: boolean
   matricNumber?: string
   firstName: string
   lastName: string

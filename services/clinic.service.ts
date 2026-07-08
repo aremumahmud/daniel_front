@@ -34,7 +34,27 @@ export async function searchPatients(query: string) {
   return res.items ?? []
 }
 
-export async function registerPatient(input: { matricNumber: string; name: string; email: string; department: string }) {
+export interface RegisterPatientInput {
+  matricNumber: string
+  name: string
+  email: string
+  department: string
+  // Optional demographics.
+  dateOfBirth?: string
+  sex?: string
+  bloodGroup?: string
+  genotype?: string
+  height?: number
+  weight?: number
+  allergies?: string
+  chronicConditions?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  stateOfOrigin?: string
+  nationality?: string
+}
+
+export async function registerPatient(input: RegisterPatientInput) {
   return apiClient.post(`${BASE}/patients`, input)
 }
 

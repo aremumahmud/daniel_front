@@ -44,8 +44,16 @@ import {
   listDoctorCapacity,
   registerPatient,
   searchPatients,
+  type RegisterPatientInput,
 } from "@/services/clinic.service"
 import type { Patient } from "@/lib/types/clinic"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 function timeAgo(iso: string) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
@@ -54,11 +62,30 @@ function timeAgo(iso: string) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m ago`
 }
 
+const BLANK_FORM = {
+  matricNumber: "",
+  name: "",
+  email: "",
+  department: "",
+  dateOfBirth: "",
+  sex: "",
+  bloodGroup: "",
+  genotype: "",
+  height: "",
+  weight: "",
+  allergies: "",
+  chronicConditions: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
+  stateOfOrigin: "",
+  nationality: "",
+}
+
 export default function ReceptionPage() {
   const { isLoading } = useAuthGuard({ requiredRole: "receptionist" })
   const { toast } = useToast()
 
-  const [form, setForm] = useState({ matricNumber: "", name: "", email: "", department: "" })
+  const [form, setForm] = useState({ ...BLANK_FORM })
   const [registering, setRegistering] = useState(false)
 
   const [query, setQuery] = useState("")
@@ -80,13 +107,31 @@ export default function ReceptionPage() {
     e.preventDefault()
     setRegistering(true)
     try {
-      await registerPatient(form)
-      toast({ title: "Student registered", description: `${form.name} (${form.matricNumber}) added.` })
-      setForm({ matricNumber: "", name: "", email: "", department: "" })
+      // Send only filled fields; convert height/weight to numbers.
+      const payload: RegisterPatientInput = {
+        matricNumber: form.matricNumber,
+        name: form.name,
+        email: form.email,
+        department: form.department,
+      }
+      const optionalStr = [
+        "dateOfBirth", "sex", "bloodGroup", "genotype", "allergies",
+        "chronicConditions", "emergencyContactName", "emergencyContactPhone",
+        "stateOfOrigin", "nationality",
+      ] as const
+      for (const k of optionalStr) {
+        if (form[k]?.trim()) (payload as Record<string, unknown>)[k] = form[k].trim()
+      }
+      if (form.height?.trim()) payload.height = Number(form.height)
+      if (form.weight?.trim()) payload.weight = Number(form.weight)
+
+      await registerPatient(payload)
+      toast({ title: "Patient registered", description: `${form.name} (${form.matricNumber}) added.` })
+      setForm({ ...BLANK_FORM })
     } catch (error) {
       toast({
         title: "Registration failed",
-        description: error instanceof Error ? error.message : "Could not register student.",
+        description: error instanceof Error ? error.message : "Could not register patient.",
         variant: "destructive",
       })
     } finally {
@@ -132,7 +177,7 @@ export default function ReceptionPage() {
       <div className="space-y-8">
         <PageHeader
           title="Reception"
-          description="Register students, find records and manage today's waiting queue."
+          description="Register patients, find records and manage today's waiting queue."
         />
 
         <div className="grid gap-4 sm:grid-cols-3">
@@ -156,7 +201,7 @@ export default function ReceptionPage() {
         <Tabs defaultValue="queue" className="space-y-6">
           <TabsList>
             <TabsTrigger value="queue">Queue</TabsTrigger>
-            <TabsTrigger value="find">Find student</TabsTrigger>
+            <TabsTrigger value="find">Find patient</TabsTrigger>
             <TabsTrigger value="register">Register</TabsTrigger>
           </TabsList>
 
@@ -175,7 +220,7 @@ export default function ReceptionPage() {
                     <EmptyState
                       icon={ListOrdered}
                       title="No one is waiting"
-                      description="Students you add from Find student will appear here."
+                      description="Patients you add from Find patient will appear here."
                     />
                   ) : (
                     <Table>
@@ -276,8 +321,8 @@ export default function ReceptionPage() {
           <TabsContent value="find">
             <Card className="rounded-lg shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Find a student</CardTitle>
-                <CardDescription>Search by name or matriculation number, then add them to the queue.</CardDescription>
+                <CardTitle className="text-base">Find a patient</CardTitle>
+                <CardDescription>Search by name or patient ID, then add them to the queue.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <form onSubmit={handleSearch} className="flex gap-2">
@@ -288,7 +333,7 @@ export default function ReceptionPage() {
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="e.g. Fatima or 21/52HL001"
                       className="pl-9"
-                      aria-label="Search students"
+                      aria-label="Search patients"
                     />
                   </div>
                   <Button type="submit" disabled={searching || !query.trim()}>
@@ -301,13 +346,13 @@ export default function ReceptionPage() {
                   <EmptyState
                     icon={Search}
                     title="No matches"
-                    description="Check the spelling, or register the student if they're new."
+                    description="Check the spelling, or register the patient if they're new."
                   />
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Student</TableHead>
+                        <TableHead>Patient</TableHead>
                         <TableHead className="hidden sm:table-cell">Department</TableHead>
                         <TableHead className="w-0" />
                       </TableRow>
@@ -343,60 +388,140 @@ export default function ReceptionPage() {
 
           {/* ---- Register ---- */}
           <TabsContent value="register">
-            <Card className="max-w-2xl rounded-lg shadow-sm">
+            <Card className="max-w-3xl rounded-lg shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Register a new student</CardTitle>
-                <CardDescription>Creates the student&apos;s clinic record. All fields are required.</CardDescription>
+                <CardTitle className="text-base">Register a new patient</CardTitle>
+                <CardDescription>
+                  Creates the patient&apos;s clinic file. Only the identity fields are required; add
+                  demographics where known.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleRegister} className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="matric">Matriculation number</Label>
-                    <Input
-                      id="matric"
-                      placeholder="21/52HL001"
-                      value={form.matricNumber}
-                      onChange={(e) => setForm({ ...form, matricNumber: e.target.value })}
-                      required
-                    />
+                <form onSubmit={handleRegister} className="space-y-8">
+                  {/* Identity */}
+                  <div className="space-y-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Identity</p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="matric">Patient ID / Matric no. *</Label>
+                        <Input id="matric" placeholder="21/52HL001" value={form.matricNumber}
+                          onChange={(e) => setForm({ ...form, matricNumber: e.target.value })} required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Full name *</Label>
+                        <Input id="name" placeholder="Fatima Yusuf" value={form.name}
+                          onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="reg-email">Email *</Label>
+                        <Input id="reg-email" type="email" placeholder="fatima@unilorin.edu.ng" value={form.email}
+                          onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="department">Department *</Label>
+                        <Input id="department" placeholder="Medicine" value={form.department}
+                          onChange={(e) => setForm({ ...form, department: e.target.value })} required />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dob">Date of birth</Label>
+                        <Input id="dob" type="date" value={form.dateOfBirth}
+                          onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="sex">Sex</Label>
+                        <Select value={form.sex} onValueChange={(v) => setForm({ ...form, sex: v })}>
+                          <SelectTrigger id="sex"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Male">Male</SelectItem>
+                            <SelectItem value="Female">Female</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full name</Label>
-                    <Input
-                      id="name"
-                      placeholder="Fatima Yusuf"
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      required
-                    />
+
+                  {/* Clinical */}
+                  <div className="space-y-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Clinical</p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="blood">Blood group</Label>
+                        <Select value={form.bloodGroup} onValueChange={(v) => setForm({ ...form, bloodGroup: v })}>
+                          <SelectTrigger id="blood"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"].map((b) => (
+                              <SelectItem key={b} value={b}>{b}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="genotype">Genotype</Label>
+                        <Select value={form.genotype} onValueChange={(v) => setForm({ ...form, genotype: v })}>
+                          <SelectTrigger id="genotype"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["AA", "AS", "SS", "AC", "SC"].map((g) => (
+                              <SelectItem key={g} value={g}>{g}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="height">Height (cm)</Label>
+                        <Input id="height" type="number" inputMode="numeric" placeholder="175" value={form.height}
+                          onChange={(e) => setForm({ ...form, height: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="weight">Weight (kg)</Label>
+                        <Input id="weight" type="number" inputMode="numeric" placeholder="68" value={form.weight}
+                          onChange={(e) => setForm({ ...form, weight: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="allergies">Allergies</Label>
+                        <Input id="allergies" placeholder="None" value={form.allergies}
+                          onChange={(e) => setForm({ ...form, allergies: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="chronic">Chronic conditions</Label>
+                        <Input id="chronic" placeholder="None" value={form.chronicConditions}
+                          onChange={(e) => setForm({ ...form, chronicConditions: e.target.value })} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-email">Email</Label>
-                    <Input
-                      id="reg-email"
-                      type="email"
-                      placeholder="fatima@unilorin.edu.ng"
-                      value={form.email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      required
-                    />
+
+                  {/* Emergency contact + origin */}
+                  <div className="space-y-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Emergency contact &amp; origin
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="ecName">Emergency contact name</Label>
+                        <Input id="ecName" placeholder="Next of kin" value={form.emergencyContactName}
+                          onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="ecPhone">Emergency contact phone</Label>
+                        <Input id="ecPhone" placeholder="+2348012345678" value={form.emergencyContactPhone}
+                          onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="state">State of origin</Label>
+                        <Input id="state" placeholder="Kwara" value={form.stateOfOrigin}
+                          onChange={(e) => setForm({ ...form, stateOfOrigin: e.target.value })} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nationality">Nationality</Label>
+                        <Input id="nationality" placeholder="Nigerian" value={form.nationality}
+                          onChange={(e) => setForm({ ...form, nationality: e.target.value })} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="department">Department</Label>
-                    <Input
-                      id="department"
-                      placeholder="Medicine"
-                      value={form.department}
-                      onChange={(e) => setForm({ ...form, department: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Button type="submit" disabled={registering}>
-                      {registering ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                      Register student
-                    </Button>
-                  </div>
+
+                  <Button type="submit" disabled={registering}>
+                    {registering ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                    Register patient
+                  </Button>
                 </form>
               </CardContent>
             </Card>

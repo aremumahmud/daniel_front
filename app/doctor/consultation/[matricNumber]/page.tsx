@@ -18,6 +18,7 @@ import { AppShell } from "@/components/shell/app-shell"
 import { EmptyState } from "@/components/shell/empty-state"
 import { StatusBadge } from "@/components/shell/status-badge"
 import { TableSkeleton } from "@/components/shell/table-skeleton"
+import { PatientDemographics } from "@/components/shell/patient-demographics"
 
 import { useAuth } from "@/hooks/use-auth"
 import { useAuthGuard } from "@/hooks/use-auth-guard"
@@ -103,13 +104,20 @@ export default function ConsultationPage() {
               <Skeleton className="h-4 w-40" />
             </div>
           ) : (
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">{patient?.name ?? matricNumber}</h1>
-              <p className="text-sm text-muted-foreground">
-                {matricNumber}
-                {patient?.department && <> &middot; {patient.department}</>}
-                {patient?.email && <> &middot; {patient.email}</>}
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight">{patient?.name ?? matricNumber}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {matricNumber}
+                  {patient?.department && <> &middot; {patient.department}</>}
+                  {patient?.email && <> &middot; {patient.email}</>}
+                </p>
+              </div>
+              {patient && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <PatientDemographics patient={patient} variant="clinical" />
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -205,7 +205,7 @@ export default function PharmacyPage() {
           <TabsContent value="lookup">
             <Card className="rounded-lg shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Lookup by matriculation number</CardTitle>
+                <CardTitle className="text-base">Lookup by Patient ID</CardTitle>
                 <CardDescription>Find every prescription on a student&apos;s record.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">

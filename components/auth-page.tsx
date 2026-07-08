@@ -87,7 +87,7 @@ export function AuthPage() {
           </p>
         </motion.div>
 
-        <p className="relative text-xs text-zinc-500">University of Ilorin &middot; Student Health Service</p>
+        <p className="relative text-xs text-zinc-500">University of Ilorin &middot; Patient Health Service</p>
       </div>
 
       {/* Form panel */}

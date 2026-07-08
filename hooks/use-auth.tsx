@@ -38,7 +38,14 @@ function userFromIdTokenClaims(claims: Record<string, any>): User | null {
       ? claims["cognito:groups"].replace(/[[\]]/g, "").split(",").map((g: string) => g.trim()).filter(Boolean)
       : []
 
-  const role = groups[0]?.toLowerCase() as UserRole | undefined
+  // "Staff" is an additive membership (staff also use the clinic as
+  // patients), not a portal role — so a staff member's clinical group
+  // (Doctor/Receptionist/Pharmacist) decides their portal regardless of
+  // group ordering. A pure-Staff account (no clinical group) is treated as
+  // a patient and sees the health-record view.
+  const isStaff = groups.some((g) => g.toLowerCase() === "staff")
+  const clinicalGroup = groups.find((g) => g.toLowerCase() !== "staff")
+  const role = (clinicalGroup?.toLowerCase() ?? (isStaff ? "student" : undefined)) as UserRole | undefined
   if (!role) return null
 
   const firstName = claims.given_name || claims.email?.split("@")[0] || "User"
@@ -48,6 +55,7 @@ function userFromIdTokenClaims(claims: Record<string, any>): User | null {
     _id: claims.sub,
     email: claims.email,
     role,
+    isStaff,
     matricNumber: claims["custom:matricNumber"],
     firstName,
     lastName,

@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/shell/page-header"
 import { StatCard } from "@/components/shell/stat-card"
 import { StatusBadge } from "@/components/shell/status-badge"
 import { TableSkeleton } from "@/components/shell/table-skeleton"
+import { PatientDemographics } from "@/components/shell/patient-demographics"
 
 import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
@@ -61,18 +62,21 @@ export default function StudentDashboardPage() {
                     <Skeleton className="h-4 w-72" />
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="space-y-1">
-                      <p className="text-lg font-semibold tracking-tight">{profile?.patient.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {profile?.patient.matricNumber} &middot; {profile?.patient.department} &middot;{" "}
-                        {profile?.patient.email}
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="space-y-1">
+                        <p className="text-lg font-semibold tracking-tight">{profile?.patient.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {profile?.patient.matricNumber} &middot; {profile?.patient.department} &middot;{" "}
+                          {profile?.patient.email}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Registered{" "}
+                        {profile?.patient.createdAt && new Date(profile.patient.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Registered{" "}
-                      {profile?.patient.createdAt && new Date(profile.patient.createdAt).toLocaleDateString()}
-                    </p>
+                    {profile?.patient && <PatientDemographics patient={profile.patient} />}
                   </div>
                 )}
               </CardContent>

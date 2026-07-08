@@ -66,7 +66,19 @@ function initialsOf(name?: string, email?: string) {
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const { user } = useAuth()
-  const nav = user ? NAV_BY_ROLE[user.role] : undefined
+
+  const sections: { section: string; items: NavItem[] }[] = []
+  if (user) {
+    const primary = NAV_BY_ROLE[user.role]
+    if (primary) sections.push(primary)
+    // Staff in a clinical role also get a link to their own health record.
+    if (user.isStaff && user.role !== "student") {
+      sections.push({
+        section: "My Health",
+        items: [{ label: "My Health Record", href: "/student/dashboard", icon: HeartPulse }],
+      })
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -80,13 +92,13 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         />
         <div className="min-w-0 leading-tight">
           <p className="truncate text-sm font-semibold tracking-tight">UniIlorin Clinic</p>
-          <p className="truncate text-[11px] text-muted-foreground">Health Records</p>
+          <p className="truncate text-[11px] text-muted-foreground">Health Services</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto p-3">
-        {nav && (
-          <div className="space-y-1">
+        {sections.map((nav) => (
+          <div key={nav.section} className="space-y-1">
             <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {nav.section}
             </p>
@@ -110,7 +122,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               )
             })}
           </div>
-        )}
+        ))}
       </nav>
 
       <div className="border-t p-3">
