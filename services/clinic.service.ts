@@ -16,14 +16,22 @@ import type {
 // covered by the AWS Lambda backend. All calls go through /api/clinic/*,
 // which proxies to API Gateway (see app/api/clinic/_lib/proxy.ts).
 // See MIGRATION_NOTES.md for what from the old services is NOT covered here.
+//
+// IMPORTANT: apiClient.request returns the parsed HTTP body directly, and
+// the Lambdas return their payload UNWRAPPED (e.g. `{ items: [...] }` or the
+// object itself) — there is no `{ success, data }` envelope. So we read the
+// body's own fields here, not a `.data` wrapper. `apiClient` still types the
+// return as ApiResponse<T>, hence the `as unknown as` casts.
 
 const BASE = "/clinic"
+
+type Items<T> = { items?: T[] }
 
 // --- Receptionist ---
 
 export async function searchPatients(query: string) {
-  const res = await apiClient.get<{ items: Patient[] }>(`${BASE}/patients`, { query })
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/patients`, { query })) as unknown as Items<Patient>
+  return res.items ?? []
 }
 
 export async function registerPatient(input: { matricNumber: string; name: string; email: string; department: string }) {
@@ -35,13 +43,13 @@ export async function getPatient(matricNumber: string) {
   // %2F back into a literal "/" before route matching, which breaks a
   // path-parameter route, so this hits GET /patient?matricNumber= instead
   // of GET /patients/{matricNumber} — see AWS_INFRA_SETUP.md §7.
-  const res = await apiClient.get<Patient>(`${BASE}/patient`, { matricNumber })
-  return res.data as unknown as Patient
+  const res = await apiClient.get(`${BASE}/patient`, { matricNumber })
+  return res as unknown as Patient
 }
 
 export async function getPatientHistory(matricNumber: string) {
-  const res = await apiClient.get<PatientHistory>(`${BASE}/patient/history`, { matricNumber })
-  return res.data as unknown as PatientHistory
+  const res = await apiClient.get(`${BASE}/patient/history`, { matricNumber })
+  return res as unknown as PatientHistory
 }
 
 export async function addToQueue(input: { matricNumber: string; patientName: string; priority?: "NORMAL" | "URGENT"; doctorId?: string; doctorName?: string }) {
@@ -53,8 +61,8 @@ export async function assignDoctorToQueueEntry(queueId: string, input: { doctorI
 }
 
 export async function listDoctorCapacity() {
-  const res = await apiClient.get<{ items: DoctorCapacity[] }>(`${BASE}/doctors/capacity`)
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/doctors/capacity`)) as unknown as Items<DoctorCapacity>
+  return res.items ?? []
 }
 
 export async function createAppointment(input: { matricNumber: string; appointmentDate: string; reason?: string }) {
@@ -62,25 +70,25 @@ export async function createAppointment(input: { matricNumber: string; appointme
 }
 
 export async function listAppointments(matricNumber?: string) {
-  const res = await apiClient.get<{ items: Appointment[] }>(`${BASE}/appointments`, { matricNumber })
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/appointments`, { matricNumber })) as unknown as Items<Appointment>
+  return res.items ?? []
 }
 
 export async function getAuditLog(matricNumber?: string) {
-  const res = await apiClient.get<{ items: AuditLogEntry[] }>(`${BASE}/audit`, { matricNumber })
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/audit`, { matricNumber })) as unknown as Items<AuditLogEntry>
+  return res.items ?? []
 }
 
 // --- Doctor ---
 
 export async function getQueue(params: { status?: string; doctorId?: string } = {}) {
-  const res = await apiClient.get<{ items: QueueEntry[] }>(`${BASE}/queue`, params)
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/queue`, params)) as unknown as Items<QueueEntry>
+  return res.items ?? []
 }
 
 export async function callNextPatient() {
-  const res = await apiClient.put<QueueEntry>(`${BASE}/queue/call-next`)
-  return res.data as unknown as QueueEntry
+  const res = await apiClient.put(`${BASE}/queue/call-next`)
+  return res as unknown as QueueEntry
 }
 
 export async function completeQueueEntry(queueId: string) {
@@ -110,13 +118,13 @@ export async function createPrescription(input: {
 // --- Pharmacist ---
 
 export async function getPharmacyAlerts(status: PrescriptionStatus = "PENDING") {
-  const res = await apiClient.get<{ items: Prescription[] }>(`${BASE}/prescriptions`, { status })
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/prescriptions`, { status })) as unknown as Items<Prescription>
+  return res.items ?? []
 }
 
 export async function getPrescriptionsByMatric(matricNumber: string) {
-  const res = await apiClient.get<{ items: Prescription[] }>(`${BASE}/prescriptions/lookup`, { matricNumber })
-  return res.data?.items ?? []
+  const res = (await apiClient.get(`${BASE}/prescriptions/lookup`, { matricNumber })) as unknown as Items<Prescription>
+  return res.items ?? []
 }
 
 export async function updatePrescriptionStatus(input: { prescriptionId: string; matricNumber: string; status: PrescriptionStatus }) {
@@ -126,6 +134,6 @@ export async function updatePrescriptionStatus(input: { prescriptionId: string; 
 // --- Student ---
 
 export async function getStudentProfile() {
-  const res = await apiClient.get<StudentProfile>(`${BASE}/students/me`)
-  return res.data as unknown as StudentProfile
+  const res = await apiClient.get(`${BASE}/students/me`)
+  return res as unknown as StudentProfile
 }
