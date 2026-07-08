@@ -1,0 +1,23 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm ci
+        # Amplify app-level env vars are available at build time but are NOT
+        # passed through to the Next.js SSR runtime. Server-side code (the
+        # app/api/* proxy routes) reads API_GATEWAY_BASE_URL at runtime, so
+        # bake it — and the public Cognito values — into .env.production,
+        # which Next.js loads at both build and runtime.
+        - env | grep -E '^(API_GATEWAY_BASE_URL|NEXT_PUBLIC_)' >> .env.production
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - .next/cache/**/*
+      - node_modules/**/*
