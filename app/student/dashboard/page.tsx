@@ -17,6 +17,7 @@ import { PatientDemographics } from "@/components/shell/patient-demographics"
 import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
 import { getStudentProfile } from "@/services/clinic.service"
+import { prescriptionMedications } from "@/lib/prescriptions"
 
 export default function StudentDashboardPage() {
   const { isLoading } = useAuthGuard({ requiredRole: "student" })
@@ -149,10 +150,17 @@ export default function StudentDashboardPage() {
                         {prescriptions.map((p) => (
                           <TableRow key={p.prescriptionId}>
                             <TableCell>
-                              <p className="font-medium">{p.medication}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {p.dosage} &middot; {p.frequency}
-                              </p>
+                              <ul className="space-y-0.5">
+                                {prescriptionMedications(p).map((m, i) => (
+                                  <li key={i}>
+                                    <span className="font-medium">{m.medication}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {" "}
+                                      — {m.dosage}, {m.frequency}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={p.status} />

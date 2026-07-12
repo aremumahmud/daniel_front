@@ -26,6 +26,7 @@ import { PageHeader } from "@/components/shell/page-header"
 import { StatCard } from "@/components/shell/stat-card"
 import { StatusBadge } from "@/components/shell/status-badge"
 import { TableSkeleton } from "@/components/shell/table-skeleton"
+import { AuditTable } from "@/components/shell/audit-table"
 
 import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
@@ -37,6 +38,7 @@ import {
   updatePrescriptionStatus,
 } from "@/services/clinic.service"
 import type { Prescription } from "@/lib/types/clinic"
+import { prescriptionMedications, prescriptionSummary } from "@/lib/prescriptions"
 
 export default function PharmacyPage() {
   const { isLoading } = useAuthGuard({ requiredRole: "pharmacist" })
@@ -74,7 +76,7 @@ export default function PharmacyPage() {
         title: status === "COLLECTED" ? "Marked as collected" : "Prescription rejected",
         description:
           status === "COLLECTED"
-            ? `${p.medication} for ${p.matricNumber}.`
+            ? `${prescriptionSummary(p)} for ${p.matricNumber}.`
             : `The student has been notified to follow up with their doctor.`,
       })
       await Promise.all([refetchAlerts(), refetchAudit()])
@@ -145,7 +147,7 @@ export default function PharmacyPage() {
           <TabsList>
             <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="lookup">Lookup</TabsTrigger>
-            <TabsTrigger value="audit">Audit log</TabsTrigger>
+            <TabsTrigger value="audit">Activity</TabsTrigger>
           </TabsList>
 
           {/* ---- Pending ---- */}
@@ -180,10 +182,17 @@ export default function PharmacyPage() {
                         <TableRow key={p.prescriptionId}>
                           <TableCell className="font-medium">{p.matricNumber}</TableCell>
                           <TableCell>
-                            <p className="font-medium">{p.medication}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {p.dosage} &middot; {p.frequency}
-                            </p>
+                            <ul className="space-y-0.5">
+                              {prescriptionMedications(p).map((m, i) => (
+                                <li key={i}>
+                                  <span className="font-medium">{m.medication}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {" "}
+                                    — {m.dosage}, {m.frequency}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
                           </TableCell>
                           <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
                             {p.doctorName}
@@ -249,10 +258,17 @@ export default function PharmacyPage() {
                         .map((p) => (
                           <TableRow key={p.prescriptionId}>
                             <TableCell>
-                              <p className="font-medium">{p.medication}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {p.dosage} &middot; {p.frequency}
-                              </p>
+                              <ul className="space-y-0.5">
+                                {prescriptionMedications(p).map((m, i) => (
+                                  <li key={i}>
+                                    <span className="font-medium">{m.medication}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {" "}
+                                      — {m.dosage}, {m.frequency}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
                             </TableCell>
                             <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
                               {new Date(p.createdAt).toLocaleDateString()}
@@ -274,8 +290,11 @@ export default function PharmacyPage() {
           <TabsContent value="audit">
             <Card className="rounded-lg shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Audit log</CardTitle>
-                <CardDescription>Every registration, consultation and dispensing action.</CardDescription>
+                <CardTitle className="text-base">Dispensing activity</CardTitle>
+                <CardDescription>
+                  Collected and rejected prescriptions handled by the pharmacy — for inventory and
+                  auditing. (You don&apos;t see consultation or registration records.)
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <form
@@ -288,52 +307,16 @@ export default function PharmacyPage() {
                   <Input
                     value={auditMatric}
                     onChange={(e) => setAuditMatric(e.target.value)}
-                    placeholder="Filter by matriculation number (optional)"
+                    placeholder="Filter by Patient ID (optional)"
                     className="max-w-sm"
-                    aria-label="Filter audit log"
+                    aria-label="Filter dispensing activity"
                   />
                   <Button type="submit" variant="outline">
                     Apply
                   </Button>
                 </form>
 
-                {auditLoading ? (
-                  <TableSkeleton rows={5} cols={4} />
-                ) : (audit ?? []).length === 0 ? (
-                  <EmptyState icon={ClipboardList} title="No audit entries" />
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>When</TableHead>
-                        <TableHead>Student</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead className="hidden sm:table-cell">By</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(audit ?? [])
-                        .slice()
-                        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-                        .map((a) => (
-                          <TableRow key={a.logId}>
-                            <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                              {new Date(a.timestamp).toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-sm">{a.matricNumber}</TableCell>
-                            <TableCell>
-                              <span className="text-sm font-medium">
-                                {a.action.replaceAll("_", " ").toLowerCase()}
-                              </span>
-                            </TableCell>
-                            <TableCell className="hidden text-sm capitalize text-muted-foreground sm:table-cell">
-                              {a.performedByRole}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </TableBody>
-                  </Table>
-                )}
+                <AuditTable entries={audit} loading={auditLoading} showActor={false} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -348,7 +331,7 @@ export default function PharmacyPage() {
             <AlertDialogDescription>
               {rejecting && (
                 <>
-                  {rejecting.medication} ({rejecting.dosage}) for {rejecting.matricNumber} will be marked as
+                  {prescriptionSummary(rejecting)} for {rejecting.matricNumber} will be marked as
                   rejected, and the student will be emailed to follow up with their doctor.
                 </>
               )}

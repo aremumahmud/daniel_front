@@ -127,12 +127,31 @@ export async function createPrescription(input: {
   matricNumber: string
   studentName: string
   studentEmail: string
-  medication: string
-  dosage: string
-  frequency: string
   doctorName: string
+  medications: { medication: string; dosage: string; frequency: string }[]
 }) {
   return apiClient.post(`${BASE}/prescriptions`, input)
+}
+
+// Edit a patient's clinical/demographic fields (identity fields are not
+// editable — see the updatePatient Lambda). Receptionist only.
+export interface UpdatePatientInput {
+  matricNumber: string
+  sex?: string
+  bloodGroup?: string
+  genotype?: string
+  height?: number
+  weight?: number
+  allergies?: string
+  chronicConditions?: string
+  emergencyContactName?: string
+  emergencyContactPhone?: string
+  stateOfOrigin?: string
+  nationality?: string
+}
+
+export async function updatePatient(input: UpdatePatientInput) {
+  return apiClient.put(`${BASE}/patients`, input)
 }
 
 // --- Pharmacist ---

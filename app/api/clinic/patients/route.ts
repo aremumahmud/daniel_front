@@ -3,10 +3,15 @@ import { proxyToApiGateway } from "../_lib/proxy"
 
 // GET  -> searchPatients   (Receptionist)
 // POST -> registerPatient  (Receptionist)
+// PUT  -> updatePatient    (Receptionist) — edit clinical/demographic fields
 export async function GET(request: NextRequest) {
   return proxyToApiGateway(request, "/patients")
 }
 
 export async function POST(request: NextRequest) {
+  return proxyToApiGateway(request, "/patients")
+}
+
+export async function PUT(request: NextRequest) {
   return proxyToApiGateway(request, "/patients")
 }

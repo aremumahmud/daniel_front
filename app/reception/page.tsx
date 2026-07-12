@@ -33,6 +33,8 @@ import { PageHeader } from "@/components/shell/page-header"
 import { StatCard } from "@/components/shell/stat-card"
 import { StatusBadge } from "@/components/shell/status-badge"
 import { TableSkeleton } from "@/components/shell/table-skeleton"
+import { EditPatientDialog } from "@/components/reception/edit-patient-dialog"
+import { AuditTable } from "@/components/shell/audit-table"
 
 import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
@@ -40,6 +42,7 @@ import { useToast } from "@/hooks/use-toast"
 import {
   addToQueue,
   assignDoctorToQueueEntry,
+  getAuditLog,
   getQueue,
   listDoctorCapacity,
   registerPatient,
@@ -88,6 +91,8 @@ export default function ReceptionPage() {
   const [form, setForm] = useState({ ...BLANK_FORM })
   const [registering, setRegistering] = useState(false)
 
+  const [editMatric, setEditMatric] = useState<string | null>(null)
+
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Patient[] | null>(null)
   const [searching, setSearching] = useState(false)
@@ -97,6 +102,7 @@ export default function ReceptionPage() {
     15000,
   )
   const { data: doctors, loading: doctorsLoading } = usePolling(listDoctorCapacity, 15000)
+  const { data: audit, loading: auditLoading } = usePolling(() => getAuditLog(), 30000)
 
   if (isLoading) return null
 
@@ -203,6 +209,7 @@ export default function ReceptionPage() {
             <TabsTrigger value="queue">Queue</TabsTrigger>
             <TabsTrigger value="find">Find patient</TabsTrigger>
             <TabsTrigger value="register">Register</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
           {/* ---- Queue ---- */}
@@ -369,6 +376,9 @@ export default function ReceptionPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="ghost" onClick={() => setEditMatric(p.matricNumber)}>
+                                Edit record
+                              </Button>
                               <Button size="sm" variant="outline" onClick={() => handleQueue(p, "URGENT")}>
                                 Urgent
                               </Button>
@@ -526,8 +536,30 @@ export default function ReceptionPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* ---- Activity ---- */}
+          <TabsContent value="activity">
+            <Card className="rounded-lg shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Front-desk activity</CardTitle>
+                <CardDescription>
+                  Registrations, record edits, queue and appointment actions. (You don&apos;t see
+                  clinical consultation records.)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AuditTable entries={audit} loading={auditLoading} />
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
+
+      <EditPatientDialog
+        matricNumber={editMatric}
+        open={!!editMatric}
+        onOpenChange={(o) => !o && setEditMatric(null)}
+      />
     </AppShell>
   )
 }

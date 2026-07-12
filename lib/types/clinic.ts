@@ -35,12 +35,22 @@ export interface Encounter {
 
 export type PrescriptionStatus = "PENDING" | "COLLECTED" | "REJECTED"
 
-export interface Prescription {
-  prescriptionId: string
-  matricNumber: string
+export interface Medication {
   medication: string
   dosage: string
   frequency: string
+}
+
+export interface Prescription {
+  prescriptionId: string
+  matricNumber: string
+  // New multi-drug records carry `medications` (a JSON string of Medication[]);
+  // older records only have the flat medication/dosage/frequency fields.
+  // Use `prescriptionMedications()` in lib/prescriptions.ts to read either.
+  medications?: string
+  medication?: string
+  dosage?: string
+  frequency?: string
   doctorName: string
   status: PrescriptionStatus
   createdAt: string

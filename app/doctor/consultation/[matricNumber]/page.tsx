@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, FileText, Loader2, Pill } from "lucide-react"
+import { ArrowLeft, FileText, Loader2, Pill, Plus, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +25,7 @@ import { useAuthGuard } from "@/hooks/use-auth-guard"
 import { usePolling } from "@/hooks/use-polling"
 import { useToast } from "@/hooks/use-toast"
 import { createEncounter, createPrescription, getPatient, getPatientHistory } from "@/services/clinic.service"
+import { prescriptionMedications } from "@/lib/prescriptions"
 
 export default function ConsultationPage() {
   const { isLoading } = useAuthGuard({ requiredRole: "doctor" })
@@ -46,10 +47,18 @@ export default function ConsultationPage() {
   const [notes, setNotes] = useState("")
   const [savingEncounter, setSavingEncounter] = useState(false)
 
-  const [rx, setRx] = useState({ medication: "", dosage: "", frequency: "" })
+  const [meds, setMeds] = useState<{ medication: string; dosage: string; frequency: string }[]>([
+    { medication: "", dosage: "", frequency: "" },
+  ])
   const [savingRx, setSavingRx] = useState(false)
 
   if (isLoading) return null
+
+  const updateMed = (i: number, field: "medication" | "dosage" | "frequency", value: string) =>
+    setMeds((prev) => prev.map((m, idx) => (idx === i ? { ...m, [field]: value } : m)))
+  const addMed = () => setMeds((prev) => [...prev, { medication: "", dosage: "", frequency: "" }])
+  const removeMed = (i: number) => setMeds((prev) => prev.filter((_, idx) => idx !== i))
+  const filledMeds = meds.filter((m) => m.medication.trim())
 
   const handleSaveEncounter = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +79,10 @@ export default function ConsultationPage() {
   const handleSavePrescription = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!patient) return
+    if (filledMeds.length === 0) {
+      toast({ title: "Add at least one medication", variant: "destructive" })
+      return
+    }
     setSavingRx(true)
     try {
       await createPrescription({
@@ -77,10 +90,14 @@ export default function ConsultationPage() {
         studentName: patient.name,
         studentEmail: patient.email,
         doctorName: user?.fullName ?? "Doctor",
-        ...rx,
+        medications: filledMeds.map((m) => ({
+          medication: m.medication.trim(),
+          dosage: m.dosage.trim(),
+          frequency: m.frequency.trim(),
+        })),
       })
       toast({ title: "Prescription submitted", description: "Pharmacy and the student have been notified." })
-      setRx({ medication: "", dosage: "", frequency: "" })
+      setMeds([{ medication: "", dosage: "", frequency: "" }])
       await refetchHistory()
     } catch {
       toast({ title: "Could not submit prescription", description: "Please try again.", variant: "destructive" })
@@ -168,35 +185,32 @@ export default function ConsultationPage() {
                   ) : (history?.prescriptions ?? []).length === 0 ? (
                     <EmptyState icon={Pill} title="No prescriptions yet" />
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Medication</TableHead>
-                          <TableHead className="hidden sm:table-cell">Dosage</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="hidden sm:table-cell">Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(history?.prescriptions ?? [])
-                          .slice()
-                          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                          .map((p) => (
-                            <TableRow key={p.prescriptionId}>
-                              <TableCell className="font-medium">{p.medication}</TableCell>
-                              <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                                {p.dosage} &middot; {p.frequency}
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={p.status} />
-                              </TableCell>
-                              <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                    <div className="space-y-3">
+                      {(history?.prescriptions ?? [])
+                        .slice()
+                        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                        .map((p) => (
+                          <div key={p.prescriptionId} className="rounded-lg border p-4">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <StatusBadge status={p.status} />
+                              <p className="text-xs text-muted-foreground">
                                 {new Date(p.createdAt).toLocaleDateString()}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
+                              </p>
+                            </div>
+                            <ul className="space-y-1">
+                              {prescriptionMedications(p).map((m, i) => (
+                                <li key={i} className="text-sm">
+                                  <span className="font-medium">{m.medication}</span>
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    — {m.dosage}, {m.frequency}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                    </div>
                   )}
                 </TabsContent>
               </Tabs>
@@ -243,45 +257,73 @@ export default function ConsultationPage() {
             <Card className="rounded-lg shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Prescribe medication</CardTitle>
-                <CardDescription>Notifies the pharmacy and emails the student.</CardDescription>
+                <CardDescription>
+                  Add every drug for this visit, then submit once. Notifies the pharmacy and emails the
+                  patient.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSavePrescription} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="medication">Medication</Label>
-                    <Input
-                      id="medication"
-                      placeholder="e.g. Amoxicillin"
-                      value={rx.medication}
-                      onChange={(e) => setRx({ ...rx, medication: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="dosage">Dosage</Label>
+                  {meds.map((m, i) => (
+                    <div key={i} className="space-y-3 rounded-lg border p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Medication {i + 1}
+                        </p>
+                        {meds.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-muted-foreground"
+                            onClick={() => removeMed(i)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                       <Input
-                        id="dosage"
-                        placeholder="500mg"
-                        value={rx.dosage}
-                        onChange={(e) => setRx({ ...rx, dosage: e.target.value })}
-                        required
+                        placeholder="e.g. Amoxicillin"
+                        value={m.medication}
+                        onChange={(e) => updateMed(i, "medication", e.target.value)}
+                        aria-label={`Medication ${i + 1} name`}
                       />
+                      <div className="grid grid-cols-2 gap-3">
+                        <Input
+                          placeholder="Dosage (500mg)"
+                          value={m.dosage}
+                          onChange={(e) => updateMed(i, "dosage", e.target.value)}
+                          aria-label={`Medication ${i + 1} dosage`}
+                        />
+                        <Input
+                          placeholder="Frequency (3× daily)"
+                          value={m.frequency}
+                          onChange={(e) => updateMed(i, "frequency", e.target.value)}
+                          aria-label={`Medication ${i + 1} frequency`}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="frequency">Frequency</Label>
-                      <Input
-                        id="frequency"
-                        placeholder="3× daily"
-                        value={rx.frequency}
-                        onChange={(e) => setRx({ ...rx, frequency: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <Button type="submit" disabled={savingRx || !rx.medication || patientLoading} className="w-full">
+                  ))}
+
+                  {meds.length >= 5 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      That&apos;s a lot of medications for one visit — double-check before submitting.
+                    </p>
+                  )}
+
+                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={addMed}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add another medication
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    disabled={savingRx || filledMeds.length === 0 || patientLoading}
+                    className="w-full"
+                  >
                     {savingRx && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Submit prescription
+                    {filledMeds.length > 1 ? ` (${filledMeds.length} drugs)` : ""}
                   </Button>
                 </form>
               </CardContent>
